@@ -40,9 +40,7 @@
 
   @for (anchor of inputAnchors(); track anchor.key + seed) {
     <div
-      class="anchor"
-      [class.left]="!anchor.reference"
-      [class.right]="anchor.reference"
+      class="anchor left"
       [style.top]="anchor.top"
       refComponent
       [data]="socketData('input', anchor.key, anchor.socket)"
@@ -52,7 +50,7 @@
   @if (referenceSocket(); as socket) {
     <div
       class="anchor left"
-      style="top: 14px"
+      style="top: 0"
       refComponent
       [data]="socketData('output', 'ref', socket)"
       [emit]="emit"

@@ -87,22 +87,12 @@ export class TransformNodeComponent implements OnChanges {
     const entries = Object.entries(this.data.inputs)
       .filter((entry): entry is [string, ClassicPreset.Input<ClassicPreset.Socket>] => !!entry[1])
       .sort((left, right) => (left[1].index ?? 0) - (right[1].index ?? 0));
-    const data = entries.filter(([key]) => !key.startsWith('$'));
-    const references = entries.filter(([key]) => key.startsWith('$'));
-    return [
-      ...data.map(([key, input], index) => ({
-        key,
-        reference: false,
-        top: `${inputAnchorRatio(index, data.length) * 100}%`,
-        socket: input.socket,
-      })),
-      ...references.map(([key, input], index) => ({
-        key,
-        reference: true,
-        top: `${14 + index * 18}px`,
-        socket: input.socket,
-      })),
-    ];
+    return entries.map(([key, input], index) => ({
+      key,
+      reference: key.startsWith('$'),
+      top: `${inputAnchorRatio(index, entries.length) * 100}%`,
+      socket: input.socket,
+    }));
   }
 
   outputSocket(): ClassicPreset.Socket | undefined {

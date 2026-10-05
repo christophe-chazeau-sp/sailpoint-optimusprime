@@ -408,7 +408,10 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
         if (target instanceof Element && !target.closest('[data-testid="node"]')) {
           this.nodeSelected.emit(null);
         }
-      } else if (context.type === 'translated' || context.type === 'zoomed' || context.type === 'resized') {
+      } else if (context.type === 'translated') {
+        this.syncBackground(area);
+        this.updateReferenceLanes();
+      } else if (context.type === 'zoomed' || context.type === 'resized') {
         this.syncBackground(area);
       }
       return context;
@@ -605,7 +608,43 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       for (const connection of references) {
         await editor.addConnection(connection);
       }
+      this.updateReferenceLanes();
     }
+  }
+
+  /** Parks each variable arrow in its own lane above the boxes so it does not cut through them. */
+  private updateReferenceLanes(): void {
+    const editor = this.editor;
+    const area = this.area;
+    if (!editor || !area) {
+      return;
+    }
+    const references = editor.getConnections().filter((connection) => connection.reference);
+    if (references.length === 0) {
+      return;
+    }
+    let top = Infinity;
+    for (const node of editor.getNodes()) {
+      const view = area.nodeViews.get(node.id);
+      if (view) {
+        top = Math.min(top, view.position.y);
+      }
+    }
+    if (!Number.isFinite(top)) {
+      return;
+    }
+    references.sort((left, right) => {
+      const leftY = area.nodeViews.get(left.target)?.position.y ?? 0;
+      const rightY = area.nodeViews.get(right.target)?.position.y ?? 0;
+      return leftY - rightY;
+    });
+    references.forEach((connection, index) => {
+      const lane = top - 48 - index * 22;
+      if (connection.lane !== lane) {
+        connection.lane = lane;
+        void area.update('connection', connection.id);
+      }
+    });
   }
 
   private async fallbackLayout(

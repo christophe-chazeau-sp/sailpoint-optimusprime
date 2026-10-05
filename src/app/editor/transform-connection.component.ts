@@ -23,7 +23,23 @@ const ARROW_HALF = 4.5;
           <polygon [attr.points]="points" />
         }
         @if (label(); as text) {
-          <text [attr.x]="labelPoint().x" [attr.y]="labelPoint().y" text-anchor="middle">{{ text }}</text>
+          @if (variable()) {
+            <rect
+              [attr.x]="labelPoint().x - labelWidth(text) / 2"
+              [attr.y]="labelPoint().y - 8"
+              [attr.width]="labelWidth(text)"
+              height="16"
+              rx="8"
+            />
+          }
+          <text
+            [attr.x]="labelPoint().x"
+            [attr.y]="labelPoint().y"
+            text-anchor="middle"
+            dominant-baseline="middle"
+          >
+            {{ text }}
+          </text>
         }
       }
     </svg>
@@ -79,8 +95,18 @@ const ARROW_HALF = 4.5;
       fill: #0f766e;
     }
 
+    svg.variable rect {
+      fill: #f0fdfa;
+      stroke: #99f6e4;
+      stroke-width: 1px;
+    }
+
     svg.variable text {
       fill: #115e59;
+      font-size: 12px;
+      font-weight: 600;
+      stroke: none;
+      paint-order: normal;
     }
   `,
 })
@@ -91,6 +117,10 @@ export class TransformConnectionComponent {
   @Input() path = '';
 
   protected stepPath(): string {
+    const around = this.referencePoints();
+    if (around) {
+      return roundedPath(around);
+    }
     const { start, end } = this;
     const stop = this.arrowBase();
     if (!start || !end || !stop) {
@@ -125,11 +155,36 @@ export class TransformConnectionComponent {
     return `${end.x},${end.y} ${base.x},${end.y - half} ${base.x},${end.y + half}`;
   }
 
+  /**
+   * Leaves the conditional through the gap, crosses above every box, and enters the target from the left.
+   */
+  private referencePoints(): Point[] | null {
+    const { start, end } = this;
+    if (!this.data?.reference || !start || !end) {
+      return null;
+    }
+    const lane = this.data.lane ?? Math.min(start.y, end.y) - 72;
+    const outward = end.x < start.x ? -48 : 48;
+    const approach = end.x - 36;
+    const stop = end.x - ARROW_LENGTH;
+    return [
+      start,
+      { x: start.x + outward, y: start.y },
+      { x: start.x + outward, y: lane },
+      { x: approach, y: lane },
+      { x: approach, y: end.y },
+      { x: stop, y: end.y },
+    ];
+  }
+
   /** Where the stroke stops so it meets the base of the arrow. */
   private arrowBase(): Point | null {
     const { start, end } = this;
     if (!start || !end) {
       return null;
+    }
+    if (this.data?.reference) {
+      return { x: end.x - ARROW_LENGTH, y: end.y };
     }
     const rightward = end.x >= start.x ? 1 : -1;
     const straight = Math.abs(start.y - end.y) < 1;
@@ -166,6 +221,12 @@ export class TransformConnectionComponent {
   }
 
   protected labelPoint(): Point {
+    const points = this.referencePoints();
+    if (points) {
+      const left = points[2];
+      const right = points[3];
+      return { x: (left.x + right.x) / 2, y: left.y - 14 };
+    }
     const { start, end } = this;
     const base = this.arrowBase();
     if (!start || !end || !base) {
@@ -175,4 +236,35 @@ export class TransformConnectionComponent {
       Math.abs(start.y - end.y) < 1 ? start.x : start.x + (end.x - start.x) / 2;
     return { x: (cornerX + base.x) / 2, y: end.y - 10 };
   }
+
+  protected labelWidth(text: string): number {
+    return text.length * 7 + 14;
+  }
+}
+
+function roundedPath(points: Point[]): string {
+  if (points.length < 2) {
+    return '';
+  }
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 1; index < points.length - 1; index++) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    const inX = current.x - previous.x;
+    const inY = current.y - previous.y;
+    const inLength = Math.hypot(inX, inY) || 1;
+    const outX = next.x - current.x;
+    const outY = next.y - current.y;
+    const outLength = Math.hypot(outX, outY) || 1;
+    const radius = Math.min(CORNER_RADIUS, inLength / 2, outLength / 2);
+    const enterX = current.x - (inX / inLength) * radius;
+    const enterY = current.y - (inY / inLength) * radius;
+    const leaveX = current.x + (outX / outLength) * radius;
+    const leaveY = current.y + (outY / outLength) * radius;
+    path += ` L ${enterX} ${enterY} Q ${current.x} ${current.y} ${leaveX} ${leaveY}`;
+  }
+  const last = points[points.length - 1];
+  path += ` L ${last.x} ${last.y}`;
+  return path;
 }

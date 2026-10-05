@@ -44,6 +44,8 @@ export class FlowConnection extends ClassicPreset.Connection<ClassicPreset.Node,
   active = false;
   /** Dashed arrow from a conditional to a step that reads one of its variables. */
   reference = false;
+  /** Content y of the lane this variable arrow uses to pass above the boxes. */
+  lane?: number;
 
   constructor(
     source: ClassicPreset.Node,
