@@ -23,14 +23,27 @@
 }
 
 .canvas-tools button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
   height: 32px;
-  padding: 0 12px;
+  padding: 0;
   border: 1px solid #d0d5dd;
   border-radius: 6px;
   background: #fff;
   color: #0033a1;
-  font: 600 13px Inter, 'Segoe UI', system-ui, sans-serif;
   cursor: pointer;
+}
+
+.canvas-tools svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .canvas-tools button:hover {

@@ -2,7 +2,24 @@
   <p class="mount-error">{{ message }}</p>
 }
 <div class="canvas-tools">
-  <button type="button" (click)="resetLayout()">Reset layout</button>
-  <button type="button" (click)="resetZoom()">Reset zoom</button>
+  <button type="button" aria-label="Reset layout" title="Reset layout" (click)="resetLayout()">
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="2" y="2" width="5" height="4" />
+      <rect x="9" y="2" width="5" height="7" />
+      <rect x="2" y="8" width="5" height="6" />
+      <rect x="9" y="11" width="5" height="3" />
+    </svg>
+  </button>
+  <button type="button" aria-label="Reset zoom" title="Reset zoom" (click)="resetZoom()">
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3" />
+    </svg>
+  </button>
+  <button type="button" aria-label="Reset everything" title="Reset everything" (click)="resetEverything()">
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" />
+      <path d="M13.5 2.5V6H10" />
+    </svg>
+  </button>
 </div>
 <div #host class="canvas-host"></div>

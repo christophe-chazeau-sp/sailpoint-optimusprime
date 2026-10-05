@@ -176,6 +176,11 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     this.syncBackground(area);
   }
 
+  protected async resetEverything(): Promise<void> {
+    await this.resetLayout();
+    await this.resetZoom();
+  }
+
   ngOnDestroy(): void {
     this.area?.destroy();
   }
