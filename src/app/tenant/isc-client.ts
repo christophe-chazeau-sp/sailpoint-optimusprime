@@ -16,7 +16,13 @@ export function browserTransport(): IscTransport {
   const local = host === 'localhost' || host === '127.0.0.1';
   return {
     url: (apiBase, path) => (local ? `/isc${path}` : `${apiBase}${path}`),
-    headers: (apiBase) => (local ? { 'X-Isc-Api': apiBase } : {}),
+    headers(apiBase) {
+      const headers: Record<string, string> = {};
+      if (local) {
+        headers['X-Isc-Api'] = apiBase;
+      }
+      return headers;
+    },
   };
 }
 
