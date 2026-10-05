@@ -121,6 +121,12 @@
 
     @if (inspectorOpen()) {
       <div class="inspector-body">
+        <div class="field-group" data-testid="transform-output">
+          <span class="field-label">Transform output</span>
+          <div class="readonly mono output" [class.failed]="!evaluation().result.ok">
+            {{ resultText(evaluation().result) }}
+          </div>
+        </div>
         @if (selected(); as node) {
           <h2 class="inspector-title">{{ selectedView()?.title }}</h2>
           <p class="inspector-category">{{ selectedView()?.category }}</p>
