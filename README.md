@@ -4,7 +4,7 @@ A read-only viewer for SailPoint Identity Security Cloud transforms. Paste or dr
 
 The published app is at https://christophe-chazeau-sp.github.io/sailpoint-optimusprime/.
 
-The version in the lower left starts at **0.1**. Every later commit increments it.
+The version in the lower right starts at **0.1**. Every later commit increments it.
 
 ## Run locally
 
