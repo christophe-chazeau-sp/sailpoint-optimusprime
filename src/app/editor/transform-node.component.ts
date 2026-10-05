@@ -50,6 +50,11 @@ export class TransformNodeComponent implements OnChanges {
     return this.data.model.kind === 'implicit';
   }
 
+  @HostBinding('class.literal')
+  get literal(): boolean {
+    return this.data.model.kind === 'literal';
+  }
+
   ngOnChanges(): void {
     this.seed++;
     this.cdr.detectChanges();

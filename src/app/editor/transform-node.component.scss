@@ -40,6 +40,26 @@
   box-shadow: none;
 }
 
+:host(.literal) {
+  border-radius: 999px;
+}
+
+:host(.literal) .card {
+  border-radius: 999px;
+  background: #f4f6f8;
+  border-color: #c5ced9;
+  box-shadow: none;
+}
+
+:host(.literal.selected) .card {
+  border-color: #98a2b3;
+}
+
+:host(.literal) .handle,
+:host(.literal) .menu {
+  display: none;
+}
+
 .handle {
   flex: 0 0 6px;
   width: 6px;
