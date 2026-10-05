@@ -1,0 +1,40 @@
+<div class="card" [title]="data.model.summary">
+  <span class="handle" aria-hidden="true"></span>
+  <div class="text">
+    <span class="category" [class]="'tone-' + data.view.tone">{{ data.view.category }}</span>
+    <span class="title">{{ data.view.title }}</span>
+    @if (data.view.detail) {
+      <span class="detail">{{ data.view.detail }}</span>
+    }
+  </div>
+  <span class="menu" aria-hidden="true">•••</span>
+
+  @if (data.result; as result) {
+    <span
+      class="result"
+      data-testid="node-result"
+      [class.failed]="!result.ok && !result.upstream"
+      [class.upstream]="!result.ok && result.upstream"
+      [title]="resultText(result)"
+      >{{ resultText(result) }}</span
+    >
+  }
+
+  @for (anchor of inputAnchors(); track anchor.key + seed) {
+    <div
+      class="anchor left"
+      [style.top]="anchor.top"
+      refComponent
+      [data]="socketData('input', anchor.key, anchor.socket)"
+      [emit]="emit"
+    ></div>
+  }
+  @if (outputSocket(); as socket) {
+    <div
+      class="anchor right"
+      refComponent
+      [data]="socketData('output', 'out', socket)"
+      [emit]="emit"
+    ></div>
+  }
+</div>

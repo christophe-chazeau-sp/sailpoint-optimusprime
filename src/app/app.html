@@ -1,0 +1,200 @@
+<div class="shell" [class.resizing]="resizing()" [style.grid-template-columns]="shellColumns()">
+  <aside class="pane source" [class.collapsed]="!leftOpen()">
+    @if (leftOpen()) {
+      <header>
+        <p class="eyebrow">Identity Security Cloud</p>
+        <h1>Transform</h1>
+      </header>
+
+      <label class="field">
+        <span>Example</span>
+        <select [value]="exampleId()" (change)="loadExample($event)">
+          @if (!exampleId()) {
+            <option value="">Custom document</option>
+          }
+          @for (example of examples; track example.id) {
+            <option [value]="example.id">{{ example.label }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="field grow">
+        <span>JSON document</span>
+        <app-json-editor
+          class="editor"
+          [value]="jsonText()"
+          [highlight]="highlight()"
+          (valueChange)="onEditorChange($event)"
+          (cursorMove)="onEditorCursor($event)"
+        />
+      </div>
+
+      <section class="test" aria-label="Test values">
+        <h2 class="test-title">Test values</h2>
+        <div class="test-fields">
+          @for (input of requirements(); track input.kind + ':' + input.key) {
+            <label class="test-field">
+              <span class="test-label">
+                {{ input.label }}
+                <small>{{ input.detail }}</small>
+              </span>
+              <input
+                type="text"
+                spellcheck="false"
+                placeholder="null"
+                [attr.data-input]="input.kind + ':' + input.key"
+                [value]="testValue(input)"
+                (input)="onTestValue(input, $event)"
+              />
+            </label>
+          } @empty {
+            <p class="test-empty">This transform does not need any input values.</p>
+          }
+        </div>
+        <div class="test-result" [class.failed]="!evaluation().result.ok" data-testid="result">
+          <span class="test-label">Result</span>
+          <output>{{ resultText(evaluation().result) }}</output>
+        </div>
+      </section>
+
+      <label class="file">
+        <input type="file" accept="application/json,.json" (change)="onFile($event)" />
+        Choose a .json file
+      </label>
+      <div class="drop" (dragover)="onDragOver($event)" (drop)="onDrop($event)">
+        Or drop a file here
+      </div>
+      @if (errorMessage(); as message) {
+        <p class="error" role="alert">{{ message }}</p>
+      }
+      <div
+        class="splitter"
+        [class.active]="resizing()"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize source pane"
+        [attr.aria-valuemin]="minLeftWidth"
+        [attr.aria-valuemax]="maxLeftWidth"
+        [attr.aria-valuenow]="leftWidth()"
+        (pointerdown)="onSplitterPointerDown($event)"
+        (pointermove)="onSplitterPointerMove($event)"
+        (pointerup)="onSplitterPointerUp($event)"
+        (pointercancel)="onSplitterPointerUp($event)"
+        (dblclick)="resetLeftWidth()"
+      ></div>
+    }
+
+    <button
+      type="button"
+      class="collapse"
+      [attr.aria-label]="leftOpen() ? 'Hide source pane' : 'Show source pane'"
+      [attr.aria-expanded]="leftOpen()"
+      (click)="toggleLeft()"
+    >
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path [attr.d]="leftOpen() ? 'M10 3L5 8l5 5' : 'M6 3l5 5-5 5'" />
+      </svg>
+    </button>
+  </aside>
+
+  <main class="canvas">
+    <app-transform-canvas
+      [graph]="graph()"
+      [selectedId]="selected()?.id ?? null"
+      [results]="nodeResults()"
+      (nodeSelected)="onSelected($event)"
+    />
+  </main>
+
+  <aside class="inspector" [class.collapsed]="!inspectorOpen()">
+    <button
+      type="button"
+      class="collapse"
+      [attr.aria-label]="inspectorOpen() ? 'Hide inspector' : 'Show inspector'"
+      [attr.aria-expanded]="inspectorOpen()"
+      (click)="toggleInspector()"
+    >
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path [attr.d]="inspectorOpen() ? 'M6 3l5 5-5 5' : 'M10 3L5 8l5 5'" />
+      </svg>
+    </button>
+
+    @if (inspectorOpen()) {
+      <div class="inspector-body">
+        @if (selected(); as node) {
+          <h2 class="inspector-title">{{ selectedView()?.title }}</h2>
+          <p class="inspector-category">{{ selectedView()?.category }}</p>
+          @if (node.description) {
+            <p class="description">{{ node.description }}</p>
+          }
+          @if (node.unknownType) {
+            <p class="warn">This type is not in the operations catalog. It is shown as-is.</p>
+          }
+
+          @if (node.name) {
+            <div class="field-group">
+              <span class="field-label">Name</span>
+              <div class="readonly">{{ node.name }}</div>
+            </div>
+          }
+          @if (node.kind === 'operation') {
+            <div class="field-group">
+              <span class="field-label">Type</span>
+              <div class="readonly mono">{{ node.type }}</div>
+            </div>
+          }
+          @if (selectedResult(); as result) {
+            <div class="field-group">
+              <span class="field-label">Output</span>
+              <div class="readonly mono output" [class.failed]="!result.ok">{{ resultText(result) }}</div>
+            </div>
+          }
+          @if (node.velocityTemplate) {
+            <div class="field-group">
+              <span class="field-label">Template</span>
+              <pre class="readonly mono">{{ node.velocityTemplate }}</pre>
+            </div>
+          }
+
+          @if (node.kind === 'operation') {
+            <h3 class="section">Inputs</h3>
+            @for (input of selectedInputs(); track input.key) {
+              <div class="field-group" data-testid="step-input">
+                <span class="field-label input-label">
+                  {{ input.key }}
+                  <small>{{ input.source }}</small>
+                  @if (input.chosen) {
+                    <span class="chosen">Selected</span>
+                  }
+                </span>
+                @if (input.result; as result) {
+                  <div
+                    class="readonly mono output"
+                    [class.chosen-value]="input.chosen"
+                    [class.failed]="!result.ok"
+                  >{{ resultText(result) }}</div>
+                } @else {
+                  <div class="readonly output skipped">Not calculated: the step stopped before it needed this value.</div>
+                }
+              </div>
+            } @empty {
+              <p class="empty">No inputs.</p>
+            }
+          } @else {
+            <h3 class="section">Attributes</h3>
+            @for (attribute of node.attributes; track attribute.key) {
+              <div class="field-group">
+                <span class="field-label">{{ attribute.key }}</span>
+                <div class="readonly">{{ attribute.value }}</div>
+              </div>
+            } @empty {
+              <p class="empty">No configuration attributes.</p>
+            }
+          }
+        } @else {
+          <p class="empty">Select a step to see its configuration.</p>
+        }
+      </div>
+    }
+  </aside>
+</div>

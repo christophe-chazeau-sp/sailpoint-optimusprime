@@ -1,0 +1,154 @@
+:host {
+  display: block;
+  box-sizing: border-box;
+  border-radius: 6px;
+  color: #1d2939;
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  cursor: pointer;
+}
+
+:host(.selected) {
+  box-shadow:
+    0 0 0 4px #eef1fe,
+    0 0 0 6px #4c6ef5,
+    0 0 14px 6px rgb(76 110 245 / 22%);
+}
+
+.card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 0 12px;
+  background: #fff;
+  border: 1px solid #dfe3ee;
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 3px rgb(238 241 254 / 70%),
+    0 2px 8px rgb(76 110 245 / 10%);
+}
+
+:host(.selected) .card {
+  border-color: #d6ddfb;
+}
+
+:host(.dashed) .card {
+  border-style: dashed;
+  border-color: #b5bdc8;
+  box-shadow: none;
+}
+
+.handle {
+  flex: 0 0 6px;
+  width: 6px;
+  height: 14px;
+  background-image: radial-gradient(circle, #7a8492 1.2px, transparent 1.4px);
+  background-size: 4px 5px;
+  background-position: -1px 0;
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.category {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.tone-transform {
+  color: #2f6fdf;
+}
+
+.tone-operation {
+  color: #7c3aed;
+}
+
+.tone-source {
+  color: #2e7d32;
+}
+
+.tone-neutral {
+  color: #667085;
+}
+
+.tone-warning {
+  color: #b54708;
+}
+
+.title {
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.detail {
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu {
+  flex: 0 0 auto;
+  color: #475467;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+.result {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 10px;
+  max-width: calc(100% - 20px);
+  padding: 1px 7px;
+  overflow: hidden;
+  border: 1px solid #abefc6;
+  border-radius: 9px;
+  background: #ecfdf3;
+  color: #067647;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result.failed {
+  border-color: #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+}
+
+.result.upstream {
+  border-color: #e4e7ec;
+  background: #f9fafb;
+  color: #667085;
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+}
+
+.anchor {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+}
+
+.left {
+  left: 0;
+}
+
+.right {
+  top: 50%;
+  left: 100%;
+}

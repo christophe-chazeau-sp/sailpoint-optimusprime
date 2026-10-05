@@ -1,0 +1,50 @@
+{
+  "name": "sailpoint-optimusprime",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "build": "ng build",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test"
+  },
+  "private": true,
+  "packageManager": "npm@11.19.0",
+  "dependencies": {
+    "@angular/common": "^22.2.0",
+    "@angular/compiler": "^22.2.0",
+    "@angular/core": "^22.2.0",
+    "@angular/elements": "^22.2.1",
+    "@angular/forms": "^22.2.0",
+    "@angular/platform-browser": "^22.2.0",
+    "@angular/router": "^22.2.0",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@lezer/highlight": "^1.2.5",
+    "codemirror": "^6.0.2",
+    "elkjs": "^0.8.2",
+    "jsonc-parser": "^3.3.1",
+    "rete": "^2.0.6",
+    "rete-angular-plugin": "^2.7.1",
+    "rete-area-plugin": "^2.3.2",
+    "rete-auto-arrange-plugin": "^2.0.2",
+    "rete-connection-plugin": "^2.0.5",
+    "rete-render-utils": "^2.0.3",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0",
+    "web-worker": "^1.5.0",
+    "zone.js": "^0.16.3"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.2.1",
+    "@angular/cli": "^22.2.1",
+    "@angular/compiler-cli": "^22.2.0",
+    "jsdom": "^30.0.0",
+    "prettier": "^3.8.1",
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.0"
+  }
+}
