@@ -42,14 +42,17 @@ export class FlowNode extends ClassicPreset.Node {
 export class FlowConnection extends ClassicPreset.Connection<ClassicPreset.Node, ClassicPreset.Node> {
   /** The source step was calculated for the current test values. */
   active = false;
+  /** Dashed arrow from a conditional to a step that reads one of its variables. */
+  reference = false;
 
   constructor(
     source: ClassicPreset.Node,
     target: ClassicPreset.Node,
     targetInput: string,
     public readonly label: string,
+    sourceOutput = 'out',
   ) {
-    super(source, 'out', target, targetInput);
+    super(source, sourceOutput, target, targetInput);
   }
 }
 

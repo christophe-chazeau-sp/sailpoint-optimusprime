@@ -10,7 +10,7 @@
       <span class="inputs">
         @for (input of data.inputValues; track input.key) {
           <span class="io-line" [title]="input.key + ' ' + input.text">
-            <span class="io-name">in {{ input.key }}</span> {{ input.text }}
+            <span class="io-name" [class.variable]="input.key.startsWith('$')">in {{ input.key }}</span> {{ input.text }}
           </span>
         }
       </span>
@@ -40,10 +40,21 @@
 
   @for (anchor of inputAnchors(); track anchor.key + seed) {
     <div
-      class="anchor left"
+      class="anchor"
+      [class.left]="!anchor.reference"
+      [class.right]="anchor.reference"
       [style.top]="anchor.top"
       refComponent
       [data]="socketData('input', anchor.key, anchor.socket)"
+      [emit]="emit"
+    ></div>
+  }
+  @if (referenceSocket(); as socket) {
+    <div
+      class="anchor left"
+      style="top: 14px"
+      refComponent
+      [data]="socketData('output', 'ref', socket)"
       [emit]="emit"
     ></div>
   }

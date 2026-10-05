@@ -107,6 +107,34 @@ describe('parseTransform', () => {
     expect(positive?.kind).toBe('literal');
   });
 
+  it('draws a dashed reference from a conditional variable to the step that reads it', () => {
+    const result = parseTransform({
+      type: 'conditional',
+      attributes: {
+        termDate: { type: 'substring', attributes: { begin: 0 } },
+        expression: '$termDate eq ACTIVE',
+        positiveCondition: 'O365-S',
+        negativeCondition: {
+          type: 'replace',
+          attributes: { regex: 'ACTIVE', replacement: '19991231', input: '$termDate' },
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const reference = result.graph.edges.find((edge) => edge.reference);
+    const conditional = result.graph.nodes.find((node) => node.type === 'conditional');
+    const replace = result.graph.nodes.find((node) => node.type === 'replace');
+    expect(reference).toMatchObject({
+      label: '$termDate',
+      sourceId: conditional?.id,
+      targetId: replace?.id,
+    });
+    expect(result.graph.edges.some((edge) => edge.label === 'termDate' && !edge.reference)).toBe(true);
+  });
+
   it('connects static template variables and keeps the Velocity template', () => {
     const example = TRANSFORM_EXAMPLES.find((item) => item.id === 'static');
     const result = parseTransform(example?.document);

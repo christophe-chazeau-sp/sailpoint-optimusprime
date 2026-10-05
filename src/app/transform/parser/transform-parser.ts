@@ -16,6 +16,15 @@ interface ChildLink {
   childId: string;
 }
 
+/** A variable declared by a conditional, visible inside that conditional's branches. */
+interface VariableBinding {
+  name: string;
+  sourceId: string;
+}
+
+const RESERVED_CONDITIONAL_KEYS = new Set(['expression', 'positiveCondition', 'negativeCondition']);
+const VARIABLE_PATTERN = /\$!?\{?([A-Za-z_][\w-]*)\}?/g;
+
 export function parseTransform(value: unknown): ParseResult {
   if (Array.isArray(value)) {
     return { ok: false, message: 'Expected a single transform object.' };
@@ -46,7 +55,12 @@ class GraphBuilder {
   private nodeCount = 0;
   private edgeCount = 0;
 
-  walk(value: Record<string, unknown>, isRoot: boolean, path: JsonPath = []): string {
+  walk(
+    value: Record<string, unknown>,
+    isRoot: boolean,
+    path: JsonPath = [],
+    scope: VariableBinding[] = [],
+  ): string {
     const existing = this.ids.get(value);
     if (existing) {
       return existing;
@@ -59,9 +73,21 @@ class GraphBuilder {
     const attributes = isRecord(value['attributes']) ? value['attributes'] : {};
     const children: ChildLink[] = [];
     const scalars: ScalarAttribute[] = [];
+    const branchScope =
+      type === 'conditional' ? [...scope, ...this.conditionalBindings(id, attributes)] : scope;
 
     for (const [key, attribute] of Object.entries(attributes)) {
-      this.absorb(type, key, attribute, [...path, 'attributes', key], children, scalars);
+      const inBranch =
+        type === 'conditional' && (key === 'positiveCondition' || key === 'negativeCondition');
+      this.absorb(
+        type,
+        key,
+        attribute,
+        [...path, 'attributes', key],
+        children,
+        scalars,
+        inBranch ? branchScope : scope,
+      );
     }
 
     this.appendRootMetadata(value, isRoot, scalars);
@@ -100,6 +126,7 @@ class GraphBuilder {
         label: child.label,
       });
     }
+    this.linkReferences(id, scalars, branchScope);
 
     return id;
   }
@@ -111,13 +138,16 @@ class GraphBuilder {
     path: JsonPath,
     children: ChildLink[],
     scalars: ScalarAttribute[],
+    scope: VariableBinding[],
   ): void {
     if (
       parentType === 'conditional' &&
       (key === 'positiveCondition' || key === 'negativeCondition') &&
       !isTransform(attribute)
     ) {
-      children.push({ key, label: key, childId: this.addLiteral(attribute, path) });
+      const childId = this.addLiteral(attribute, path);
+      children.push({ key, label: key, childId });
+      this.linkReferences(childId, [{ key: 'value', value: formatConfig(attribute) }], scope);
       return;
     }
 
@@ -129,23 +159,58 @@ class GraphBuilder {
       attribute.forEach((item, index) => {
         const label = `${key}[${index}]`;
         const itemPath = [...path, index];
-        children.push({
-          key: label,
-          label,
-          childId: isTransform(item)
-            ? this.walk(item, false, itemPath)
-            : this.addLiteral(item, itemPath),
-        });
+        const childId = isTransform(item)
+          ? this.walk(item, false, itemPath, scope)
+          : this.addLiteral(item, itemPath);
+        if (!isTransform(item)) {
+          this.linkReferences(childId, [{ key: 'value', value: formatConfig(item) }], scope);
+        }
+        children.push({ key: label, label, childId });
       });
       return;
     }
 
     if (isTransform(attribute)) {
-      children.push({ key, label: key, childId: this.walk(attribute, false, path) });
+      children.push({ key, label: key, childId: this.walk(attribute, false, path, scope) });
       return;
     }
 
     scalars.push({ key, value: formatConfig(attribute) });
+  }
+
+  /** Extra conditional attributes are variables. Their names are in scope inside the branches. */
+  private conditionalBindings(
+    sourceId: string,
+    attributes: Record<string, unknown>,
+  ): VariableBinding[] {
+    return Object.keys(attributes)
+      .filter((key) => !RESERVED_CONDITIONAL_KEYS.has(key))
+      .map((name) => ({ name, sourceId }));
+  }
+
+  /** Draws `$name` back to the conditional that declared it. A node does not point at itself. */
+  private linkReferences(targetId: string, scalars: ScalarAttribute[], scope: VariableBinding[]): void {
+    const seen = new Set<string>();
+    for (const scalar of scalars) {
+      for (const name of variableNames(scalar.value)) {
+        if (seen.has(name)) {
+          continue;
+        }
+        const binding = [...scope].reverse().find((item) => item.name === name);
+        if (!binding || binding.sourceId === targetId) {
+          continue;
+        }
+        seen.add(name);
+        this.edges.push({
+          id: this.nextEdgeId(),
+          sourceId: binding.sourceId,
+          targetId,
+          inputKey: `$${name}`,
+          label: `$${name}`,
+          reference: true,
+        });
+      }
+    }
   }
 
   private appendRootMetadata(
@@ -258,6 +323,10 @@ function humanize(type: string): string {
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
     .replace(/[_-]+/g, ' ');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function variableNames(text: string): string[] {
+  return [...text.matchAll(VARIABLE_PATTERN)].map((match) => match[1]);
 }
 
 function truncate(text: string, max: number): string {

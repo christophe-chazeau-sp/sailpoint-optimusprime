@@ -28,6 +28,8 @@ export interface TransformEdgeModel {
   targetId: string;
   inputKey: string;
   label: string;
+  /** The target reads a variable declared by the source conditional. */
+  reference?: boolean;
 }
 
 export interface TransformGraph {

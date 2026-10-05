@@ -208,7 +208,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
         return {
           index,
           key: connection.label || 'input',
-          text: result?.ok ? formatValue(result.value) : literal === undefined ? '' : formatValue(literal),
+          text: this.carriedText(connection, result, literal),
         };
       })
       .filter((item) => item.text !== '')
@@ -216,8 +216,28 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       .map(({ key, text }) => ({ key, text }));
   }
 
+  /** A variable arrow carries the declared value, not the conditional's own output. */
+  private carriedText(
+    connection: FlowConnection,
+    result: StepResult | undefined,
+    literal: string | undefined,
+  ): string {
+    if (connection.reference) {
+      const name = connection.label.startsWith('$') ? connection.label.slice(1) : connection.label;
+      const variable = result?.variables?.find((item) => item.name === name);
+      return variable ? formatValue(variable.value) : '';
+    }
+    if (result?.ok) {
+      return formatValue(result.value);
+    }
+    return literal === undefined ? '' : formatValue(literal);
+  }
+
   /** An arrow is active when its source step was calculated. Implicit input follows its target. */
   private connectionActive(connection: FlowConnection): boolean {
+    if (connection.reference) {
+      return false;
+    }
     const source = this.editor?.getNode(connection.source);
     const target = this.editor?.getNode(connection.target);
     if (!source || !target) {
@@ -482,6 +502,9 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
           node.addInput(edge.inputKey, input);
         });
       node.addOutput('out', new ClassicPreset.Output(valueSocket, 'Output'));
+      if (graph.edges.some((edge) => edge.reference && edge.sourceId === model.id)) {
+        node.addOutput('ref', new ClassicPreset.Output(valueSocket, 'Variable'));
+      }
       nodes.set(model.id, node);
       await editor.addNode(node);
     }
@@ -502,7 +525,14 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       const source = nodes.get(implicitIds.has(edge.sourceId) ? TRANSFORM_INPUT_ID : edge.sourceId);
       const target = nodes.get(edge.targetId);
       if (source && target) {
-        const connection = new FlowConnection(source, target, edge.inputKey, edge.label);
+        const connection = new FlowConnection(
+          source,
+          target,
+          edge.inputKey,
+          edge.label,
+          edge.reference ? 'ref' : 'out',
+        );
+        connection.reference = edge.reference === true;
         connection.active = this.connectionActive(connection);
         await editor.addConnection(connection);
       }
@@ -561,10 +591,20 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     if (!editor || !area) {
       return;
     }
+    const references = editor.getConnections().filter((connection) => connection.reference);
+    for (const connection of references) {
+      await editor.removeConnection(connection.id);
+    }
     try {
-      await this.arrange?.layout({ options: LAYOUT_OPTIONS });
-    } catch {
-      await this.fallbackLayout(editor, area);
+      try {
+        await this.arrange?.layout({ options: LAYOUT_OPTIONS });
+      } catch {
+        await this.fallbackLayout(editor, area);
+      }
+    } finally {
+      for (const connection of references) {
+        await editor.addConnection(connection);
+      }
     }
   }
 
