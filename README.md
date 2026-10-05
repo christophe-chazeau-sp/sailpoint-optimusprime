@@ -27,7 +27,7 @@ npx ng test --watch=false
 - Select a step to see its type, output, variables, and inputs. The input that the step actually used is highlighted.
 - Supply the implicit input and any account or identity attributes the transform reads. The diagram and the **Transform output** field update together.
 - Drag boxes around, then use the diagram buttons to reset the layout, the zoom, or both.
-- Literal values are pills sized to the text. The transform's input and final output are light blue pills at the two ends of the diagram.
+- Literal values are pills sized to the text. The transform input pill uses the same blue as a chosen input, and the final output pill uses the same green as the result (red when the result fails).
 
 ## Evaluation
 

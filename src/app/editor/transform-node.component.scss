@@ -87,17 +87,45 @@
   border-color: #98a2b3;
 }
 
-:host(.endpoint) .card {
+:host(.input) .card {
   background: #e8f2fc;
   border-color: #0071ce;
 }
 
-:host(.endpoint) .title {
+:host(.input) .title {
   color: #0033a1;
 }
 
-:host(.endpoint.selected) .card {
+:host(.input.selected) .card {
   border-color: #0033a1;
+}
+
+:host(.output) .card {
+  background: #ecfdf3;
+  border-color: #abefc6;
+}
+
+:host(.output) .title {
+  color: #067647;
+}
+
+:host(.output.selected) .card {
+  border-color: #067647;
+}
+
+:host(.output.failed) .card {
+  background: #fef3f2;
+  border-color: #fecdca;
+}
+
+:host(.output.failed) .title {
+  color: #b42318;
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  font-weight: 400;
+}
+
+:host(.output.failed.selected) .card {
+  border-color: #b42318;
 }
 
 .handle {

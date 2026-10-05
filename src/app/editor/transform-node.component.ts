@@ -60,9 +60,20 @@ export class TransformNodeComponent implements OnChanges {
     return this.data.capsule === 'literal';
   }
 
-  @HostBinding('class.endpoint')
-  get endpoint(): boolean {
-    return this.data.capsule === 'input' || this.data.capsule === 'output';
+  @HostBinding('class.input')
+  get inputCapsule(): boolean {
+    return this.data.capsule === 'input';
+  }
+
+  @HostBinding('class.output')
+  get outputCapsule(): boolean {
+    return this.data.capsule === 'output';
+  }
+
+  @HostBinding('class.failed')
+  get failed(): boolean {
+    const result = this.data.result;
+    return this.data.capsule === 'output' && result != null && !result.ok;
   }
 
   ngOnChanges(): void {
