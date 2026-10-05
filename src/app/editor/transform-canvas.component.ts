@@ -21,6 +21,8 @@ import { TransformGraph, TransformNodeModel } from '../transform/model/transform
 import { presentNode } from '../transform/presentation';
 import { AnchorSocketComponent } from './anchor-socket.component';
 import {
+  capsuleSize,
+  CapsuleRole,
   EditorNode,
   FlowConnection,
   FlowNode,
@@ -34,6 +36,17 @@ import {
 import { TransformConnectionComponent } from './transform-connection.component';
 import { TransformNodeComponent } from './transform-node.component';
 
+function endpointCaption(role: 'input' | 'output', result: StepResult | undefined): string {
+  const text = !result
+    ? 'null'
+    : result.ok
+      ? formatValue(result.value)
+      : result.upstream
+        ? 'Input failed'
+        : result.error;
+  return `${role === 'input' ? 'in' : 'out'} ${text}`;
+}
+
 function sameInputs(current: NodeInputValue[], next: NodeInputValue[]): boolean {
   return (
     current.length === next.length &&
@@ -43,6 +56,9 @@ function sameInputs(current: NodeInputValue[], next: NodeInputValue[]): boolean 
 
 type Schemes = GetSchemes<EditorNode, FlowConnection>;
 type AreaExtra = AngularArea2D<Schemes>;
+
+const TRANSFORM_INPUT_ID = 'transform-input';
+const TRANSFORM_OUTPUT_ID = 'transform-output';
 
 const DOT_SPACING = 22;
 const PORT_SIZE = 2;
@@ -140,7 +156,22 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       return;
     }
     for (const node of editor.getNodes()) {
+      if (node.capsule === 'input' || node.capsule === 'output') {
+        this.refreshEndpoint(node);
+      }
+    }
+    for (const node of editor.getNodes()) {
+      if (node.capsule === 'input' || node.capsule === 'output') {
+        continue;
+      }
       const next = this.results?.get(node.model.id);
+      if (node.capsule === 'literal') {
+        if (next !== node.result) {
+          node.result = next;
+          void area.update('node', node.id);
+        }
+        continue;
+      }
       const inputValues = this.inputValues(node);
       const inputsChanged = !sameInputs(node.inputValues, inputValues);
       node.inputValues = inputValues;
@@ -192,10 +223,83 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     if (!source || !target) {
       return false;
     }
-    if (source.model.kind === 'implicit') {
+    if (source.model.kind === 'implicit' || source.capsule === 'input') {
       return target.result != null;
     }
     return source.result != null;
+  }
+
+  private fitCapsule(node: EditorNode, role: CapsuleRole, caption: string): void {
+    const size = capsuleSize(caption);
+    node.capsule = role;
+    node.caption = caption;
+    node.width = size.width;
+    node.height = size.height;
+  }
+
+  private createEndpoint(role: 'input' | 'output'): EditorNode {
+    const model: TransformNodeModel = {
+      id: role === 'input' ? TRANSFORM_INPUT_ID : TRANSFORM_OUTPUT_ID,
+      kind: role === 'input' ? 'implicit' : 'literal',
+      type: role,
+      label: role === 'input' ? 'Input' : 'Output',
+      summary: role === 'input' ? 'Transform input' : 'Transform output',
+      description:
+        role === 'input'
+          ? 'Value supplied to the whole transform.'
+          : 'Value produced by the whole transform.',
+      attributes: [],
+      unknownType: false,
+    };
+    const node = new FlowNode(model, {
+      category: role === 'input' ? 'Input' : 'Output',
+      tone: 'neutral',
+      title: model.label,
+    });
+    const result = role === 'input' ? this.implicitResult() : this.rootResult();
+    node.result = result;
+    this.fitCapsule(node, role, endpointCaption(role, result));
+    if (role === 'output') {
+      const input = new ClassicPreset.Input(valueSocket, 'Output');
+      input.index = 0;
+      node.addInput('value', input);
+    } else {
+      node.addOutput('out', new ClassicPreset.Output(valueSocket, 'Output'));
+    }
+    return node;
+  }
+
+  /** Keeps an endpoint pill wrapped around the current value, growing the input pill leftward. */
+  private refreshEndpoint(node: EditorNode): void {
+    const role = node.capsule === 'output' ? 'output' : 'input';
+    const result = role === 'input' ? this.implicitResult() : this.rootResult();
+    const caption = endpointCaption(role, result);
+    const size = capsuleSize(caption);
+    const area = this.area;
+    const view = area?.nodeViews.get(node.id);
+    const widthChanged = size.width !== node.width;
+    if (caption === node.caption && !widthChanged && size.height === node.height && result === node.result) {
+      return;
+    }
+    const shiftLeft = role === 'input' && widthChanged && view ? size.width - node.width : 0;
+    node.caption = caption;
+    node.width = size.width;
+    node.height = size.height;
+    node.result = result;
+    if (shiftLeft && view && area) {
+      void area.translate(node.id, { x: view.position.x - shiftLeft, y: view.position.y });
+    }
+    void area?.update('node', node.id);
+  }
+
+  private implicitResult(): StepResult | undefined {
+    const implicit = this.graph?.nodes.find((node) => node.kind === 'implicit');
+    return implicit ? this.results?.get(implicit.id) : undefined;
+  }
+
+  private rootResult(): StepResult | undefined {
+    const rootId = this.graph?.rootId;
+    return rootId ? this.results?.get(rootId) : undefined;
   }
 
   protected async resetLayout(): Promise<void> {
@@ -275,6 +379,9 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       }
       if (context.type === 'nodepicked') {
         const node = editor.getNode(context.data.id);
+        if (node?.capsule === 'input' || node?.capsule === 'output') {
+          return context;
+        }
         this.nodeSelected.emit(node?.model ?? null);
       } else if (context.type === 'pointerdown') {
         const target = context.data.event.target;
@@ -349,13 +456,24 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     const graph = this.graph;
     const nodes = new Map<string, EditorNode>();
 
+    const implicitIds = new Set(
+      graph.nodes.filter((model) => model.kind === 'implicit').map((model) => model.id),
+    );
+
     for (const model of graph.nodes) {
+      if (model.kind === 'implicit') {
+        continue;
+      }
       const view = presentNode(graph, model);
       const node = new FlowNode(model, view);
       node.result = this.results?.get(model.id);
-      node.width = NODE_WIDTH;
-      const inputCount = graph.edges.filter((edge) => edge.targetId === model.id).length;
-      node.height = nodeHeight(view, inputCount, variableHeight(node.result?.variables?.length ?? 0));
+      if (model.kind === 'literal') {
+        this.fitCapsule(node, 'literal', view.title);
+      } else {
+        node.width = NODE_WIDTH;
+        const inputCount = graph.edges.filter((edge) => edge.targetId === model.id).length;
+        node.height = nodeHeight(view, inputCount, variableHeight(node.result?.variables?.length ?? 0));
+      }
       graph.edges
         .filter((edge) => edge.targetId === model.id)
         .forEach((edge, index) => {
@@ -368,14 +486,34 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       await editor.addNode(node);
     }
 
+    if (implicitIds.size > 0) {
+      const input = this.createEndpoint('input');
+      nodes.set(input.model.id, input);
+      await editor.addNode(input);
+    }
+    const output = this.createEndpoint('output');
+    nodes.set(output.model.id, output);
+    await editor.addNode(output);
+
     for (const edge of graph.edges) {
-      const source = nodes.get(edge.sourceId);
+      if (implicitIds.has(edge.targetId)) {
+        continue;
+      }
+      const source = nodes.get(implicitIds.has(edge.sourceId) ? TRANSFORM_INPUT_ID : edge.sourceId);
       const target = nodes.get(edge.targetId);
       if (source && target) {
         const connection = new FlowConnection(source, target, edge.inputKey, edge.label);
         connection.active = this.connectionActive(connection);
         await editor.addConnection(connection);
       }
+    }
+
+    const root = nodes.get(graph.rootId);
+    const outputNode = nodes.get(TRANSFORM_OUTPUT_ID);
+    if (root && outputNode) {
+      const connection = new FlowConnection(root, outputNode, 'value', '');
+      connection.active = this.connectionActive(connection);
+      await editor.addConnection(connection);
     }
 
     await this.layoutNodes();

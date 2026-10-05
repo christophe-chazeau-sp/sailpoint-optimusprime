@@ -47,12 +47,22 @@ export class TransformNodeComponent implements OnChanges {
 
   @HostBinding('class.dashed')
   get dashed(): boolean {
-    return this.data.model.kind === 'implicit';
+    return this.data.model.kind === 'implicit' && this.data.capsule !== 'input';
+  }
+
+  @HostBinding('class.capsule')
+  get capsule(): boolean {
+    return this.data.capsule != null;
   }
 
   @HostBinding('class.literal')
   get literal(): boolean {
-    return this.data.model.kind === 'literal';
+    return this.data.capsule === 'literal';
+  }
+
+  @HostBinding('class.endpoint')
+  get endpoint(): boolean {
+    return this.data.capsule === 'input' || this.data.capsule === 'output';
   }
 
   ngOnChanges(): void {

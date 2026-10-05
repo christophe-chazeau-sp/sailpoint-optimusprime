@@ -40,24 +40,64 @@
   box-shadow: none;
 }
 
-:host(.literal) {
+:host(.capsule) {
   border-radius: 999px;
 }
 
-:host(.literal) .card {
+:host(.capsule) .card {
+  justify-content: center;
+  gap: 0;
+  padding: 0 16px;
   border-radius: 999px;
+  box-shadow: none;
+}
+
+:host(.capsule) .text {
+  flex: 0 1 auto;
+  align-items: center;
+}
+
+:host(.capsule) .title {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+:host(.capsule) .category,
+:host(.capsule) .detail,
+:host(.capsule) .handle,
+:host(.capsule) .menu,
+:host(.capsule) .result,
+:host(.capsule) .inputs,
+:host(.capsule) .variables {
+  display: none;
+}
+
+:host(.literal) .card {
   background: #f4f6f8;
   border-color: #c5ced9;
-  box-shadow: none;
+}
+
+:host(.literal) .title {
+  color: #1d2939;
 }
 
 :host(.literal.selected) .card {
   border-color: #98a2b3;
 }
 
-:host(.literal) .handle,
-:host(.literal) .menu {
-  display: none;
+:host(.endpoint) .card {
+  background: #e8f2fc;
+  border-color: #0071ce;
+}
+
+:host(.endpoint) .title {
+  color: #0033a1;
+}
+
+:host(.endpoint.selected) .card {
+  border-color: #0033a1;
 }
 
 .handle {

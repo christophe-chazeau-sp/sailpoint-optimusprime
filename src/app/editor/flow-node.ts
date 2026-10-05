@@ -8,6 +8,9 @@ export interface NodeInputValue {
   text: string;
 }
 
+/** A value drawn as a pill: a literal, or the whole transform's input or output. */
+export type CapsuleRole = 'literal' | 'input' | 'output';
+
 export type EditorNode = ClassicPreset.Node & {
   width: number;
   height: number;
@@ -15,6 +18,9 @@ export type EditorNode = ClassicPreset.Node & {
   view: NodePresentation;
   result?: StepResult;
   inputValues: NodeInputValue[];
+  capsule?: CapsuleRole;
+  /** Text inside a capsule. Action cards keep using {@link NodePresentation.title}. */
+  caption?: string;
 };
 
 export class FlowNode extends ClassicPreset.Node {
@@ -22,6 +28,8 @@ export class FlowNode extends ClassicPreset.Node {
   height = 60;
   result?: StepResult;
   inputValues: NodeInputValue[] = [];
+  capsule?: CapsuleRole;
+  caption?: string;
 
   constructor(
     public readonly model: TransformNodeModel,
@@ -48,6 +56,34 @@ export class FlowConnection extends ClassicPreset.Connection<ClassicPreset.Node,
 export const valueSocket = new ClassicPreset.Socket('value');
 
 export const NODE_WIDTH = 300;
+
+const CAPSULE_FONT = '600 13px Consolas, "Courier New", monospace';
+const CAPSULE_PADDING = 44;
+export const CAPSULE_HEIGHT = 36;
+
+let measureCanvas: CanvasRenderingContext2D | null | undefined;
+
+function measureText(text: string): number {
+  const fallback = text.length * 7.8;
+  if (typeof document === 'undefined') {
+    return fallback;
+  }
+  if (measureCanvas === undefined) {
+    measureCanvas = document.createElement('canvas').getContext('2d');
+  }
+  if (!measureCanvas) {
+    return fallback;
+  }
+  measureCanvas.font = CAPSULE_FONT;
+  const width = measureCanvas.measureText(text).width;
+  return width > 0 ? width : fallback;
+}
+
+/** Pill size that hugs its text, capped so a long value stays on one line. */
+export function capsuleSize(text: string): { width: number; height: number } {
+  const width = Math.ceil(Math.min(280, Math.max(48, measureText(text) + CAPSULE_PADDING)));
+  return { width, height: CAPSULE_HEIGHT };
+}
 
 export function nodeHeight(view: NodePresentation, inputCount = 1, extra = 0): number {
   const base = view.detail ? 72 : 58;
