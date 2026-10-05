@@ -16,7 +16,7 @@ const ARROW_HALF = 4.5;
   // The Rete connection wrapper assigns inputs imperatively and then calls detectChanges().
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
-    <svg data-testid="connection">
+    <svg data-testid="connection" [class.active]="active()">
       @if (start && end) {
         <path [attr.d]="stepPath()" />
         @if (arrowPoints(); as points) {
@@ -54,6 +54,19 @@ const ARROW_HALF = 4.5;
       paint-order: stroke;
       stroke: #fafbfc;
       stroke-width: 4px;
+    }
+
+    svg.active path {
+      stroke: #0071ce;
+      stroke-width: 2px;
+    }
+
+    svg.active polygon {
+      fill: #0071ce;
+    }
+
+    svg.active text {
+      fill: #0033a1;
     }
   `,
 })
@@ -123,6 +136,10 @@ export class TransformConnectionComponent {
       0,
       Math.min(CORNER_RADIUS, Math.abs(end.x - start.x) / 2, Math.abs(end.y - start.y) / 2),
     );
+  }
+
+  protected active(): boolean {
+    return Boolean(this.data?.active);
   }
 
   protected label(): string | null {

@@ -13,6 +13,30 @@
   height: 100%;
 }
 
+.canvas-tools {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+}
+
+.canvas-tools button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #fff;
+  color: #0033a1;
+  font: 600 13px Inter, 'Segoe UI', system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.canvas-tools button:hover {
+  background: #e8f2fc;
+}
+
 .mount-error {
   position: absolute;
   margin: 12px;

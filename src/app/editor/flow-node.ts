@@ -25,6 +25,9 @@ export class FlowNode extends ClassicPreset.Node {
 }
 
 export class FlowConnection extends ClassicPreset.Connection<ClassicPreset.Node, ClassicPreset.Node> {
+  /** The source step was calculated for the current test values. */
+  active = false;
+
   constructor(
     source: ClassicPreset.Node,
     target: ClassicPreset.Node,

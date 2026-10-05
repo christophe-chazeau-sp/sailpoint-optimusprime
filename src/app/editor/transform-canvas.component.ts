@@ -38,6 +38,16 @@ type AreaExtra = AngularArea2D<Schemes>;
 
 const DOT_SPACING = 22;
 const PORT_SIZE = 2;
+const FIT_SCALE = 0.85;
+
+const LAYOUT_OPTIONS = {
+  'elk.algorithm': 'layered',
+  'elk.direction': 'RIGHT',
+  'elk.edgeRouting': 'ORTHOGONAL',
+  'elk.spacing.nodeNode': '48',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '120',
+  'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+} as const;
 
 const leftToRightPorts: ArrangePreset = () => ({
   port(data) {
@@ -127,6 +137,43 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
         void area.update('node', node.id);
       }
     }
+    for (const connection of editor.getConnections()) {
+      const active = this.connectionActive(connection);
+      if (connection.active !== active) {
+        connection.active = active;
+        void area.update('connection', connection.id);
+      }
+    }
+  }
+
+  /** An arrow is active when its source step was calculated. Implicit input follows its target. */
+  private connectionActive(connection: FlowConnection): boolean {
+    const source = this.editor?.getNode(connection.source);
+    const target = this.editor?.getNode(connection.target);
+    if (!source || !target) {
+      return false;
+    }
+    if (source.model.kind === 'implicit') {
+      return target.result != null;
+    }
+    return source.result != null;
+  }
+
+  protected async resetLayout(): Promise<void> {
+    await this.layoutNodes();
+    if (this.area) {
+      this.syncBackground(this.area);
+    }
+  }
+
+  protected async resetZoom(): Promise<void> {
+    const area = this.area;
+    const editor = this.editor;
+    if (!area || !editor) {
+      return;
+    }
+    await AreaExtensions.zoomAt(area, editor.getNodes(), { scale: FIT_SCALE });
+    this.syncBackground(area);
   }
 
   ngOnDestroy(): void {
@@ -281,26 +328,15 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       const source = nodes.get(edge.sourceId);
       const target = nodes.get(edge.targetId);
       if (source && target) {
-        await editor.addConnection(new FlowConnection(source, target, edge.inputKey, edge.label));
+        const connection = new FlowConnection(source, target, edge.inputKey, edge.label);
+        connection.active = this.connectionActive(connection);
+        await editor.addConnection(connection);
       }
     }
 
-    try {
-      await this.arrange?.layout({
-        options: {
-          'elk.algorithm': 'layered',
-          'elk.direction': 'RIGHT',
-          'elk.edgeRouting': 'ORTHOGONAL',
-          'elk.spacing.nodeNode': '48',
-          'elk.layered.spacing.nodeNodeBetweenLayers': '120',
-          'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-        },
-      });
-    } catch {
-      await this.fallbackLayout(editor, area);
-    }
+    await this.layoutNodes();
 
-    await AreaExtensions.zoomAt(area, editor.getNodes(), { scale: 0.85 });
+    await AreaExtensions.zoomAt(area, editor.getNodes(), { scale: FIT_SCALE });
     this.syncBackground(area);
     await this.syncSelection();
   }
@@ -334,6 +370,19 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     }
     this.area?.nodeViews.clear();
     this.area?.connectionViews.clear();
+  }
+
+  private async layoutNodes(): Promise<void> {
+    const editor = this.editor;
+    const area = this.area;
+    if (!editor || !area) {
+      return;
+    }
+    try {
+      await this.arrange?.layout({ options: LAYOUT_OPTIONS });
+    } catch {
+      await this.fallbackLayout(editor, area);
+    }
   }
 
   private async fallbackLayout(

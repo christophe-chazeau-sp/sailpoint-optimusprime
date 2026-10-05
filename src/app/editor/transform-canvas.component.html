@@ -1,4 +1,8 @@
 @if (mountError(); as message) {
   <p class="mount-error">{{ message }}</p>
 }
+<div class="canvas-tools">
+  <button type="button" (click)="resetLayout()">Reset layout</button>
+  <button type="button" (click)="resetZoom()">Reset zoom</button>
+</div>
 <div #host class="canvas-host"></div>
