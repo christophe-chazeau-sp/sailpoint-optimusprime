@@ -1,6 +1,7 @@
 import { Component, computed, signal } from '@angular/core';
 import { JsonEditorComponent } from './editor/json-editor.component';
 import { TransformCanvasComponent } from './editor/transform-canvas.component';
+import { TenantBrowserComponent } from './tenant/tenant-browser.component';
 import {
   evaluateTransform,
   formatValue,
@@ -70,7 +71,7 @@ function storedLeftOpen(): boolean {
 
 @Component({
   selector: 'app-root',
-  imports: [TransformCanvasComponent, JsonEditorComponent],
+  imports: [TransformCanvasComponent, JsonEditorComponent, TenantBrowserComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
@@ -227,6 +228,11 @@ export class App {
     this.selected.set(
       (id ? graphNode(graph, id) : undefined) ?? graphNode(graph, graph.rootId) ?? null,
     );
+  }
+
+  protected onTenantTransform(text: string): void {
+    this.exampleId.set('');
+    this.applyDocument(text, false);
   }
 
   protected loadExample(event: Event): void {

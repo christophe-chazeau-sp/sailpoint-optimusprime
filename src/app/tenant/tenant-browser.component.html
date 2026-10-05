@@ -1,0 +1,82 @@
+<section class="tenant" aria-label="Tenant">
+  <div class="mode" role="group" aria-label="Authentication">
+    <button type="button" [class.on]="mode() === 'jwt'" (click)="setMode('jwt')">JWT token</button>
+    <button type="button" [class.on]="mode() === 'client'" (click)="setMode('client')">Client ID and secret</button>
+  </div>
+
+  <label class="field">
+    <span>Tenant</span>
+    <input
+      type="text"
+      spellcheck="false"
+      autocomplete="off"
+      placeholder="acme or https://acme.identitynow.com"
+      [value]="tenant()"
+      (input)="onTenant($event)"
+    />
+  </label>
+
+  @if (mode() === 'jwt') {
+    <label class="field">
+      <span>JWT token</span>
+      <input
+        type="password"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="Access token"
+        [value]="token()"
+        (input)="onToken($event)"
+      />
+    </label>
+  } @else {
+    <label class="field">
+      <span>Client ID</span>
+      <input
+        type="text"
+        spellcheck="false"
+        autocomplete="off"
+        [value]="clientId()"
+        (input)="onClientId($event)"
+      />
+    </label>
+    <label class="field">
+      <span>Client secret</span>
+      <input
+        type="password"
+        spellcheck="false"
+        autocomplete="off"
+        [value]="clientSecret()"
+        (input)="onClientSecret($event)"
+      />
+    </label>
+  }
+
+  <button type="button" class="load" [disabled]="busy()" (click)="loadList()">
+    {{ busy() ? 'Loading…' : 'Load transforms' }}
+  </button>
+  @if (status()) {
+    <p class="hint">{{ status() }}</p>
+  }
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  @if (transforms().length) {
+    <label class="field">
+      <span>Transform</span>
+      <input
+        type="search"
+        spellcheck="false"
+        placeholder="Filter by name"
+        [value]="filter()"
+        (input)="onFilter($event)"
+      />
+      <select [value]="selectedId()" (change)="onPick($event)">
+        <option value="">Select a transform</option>
+        @for (item of filtered(); track item.id) {
+          <option [value]="item.id">{{ item.name }}{{ item.type ? ' · ' + item.type : '' }}</option>
+        }
+      </select>
+    </label>
+  }
+</section>

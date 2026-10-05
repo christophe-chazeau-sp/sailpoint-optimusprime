@@ -6,6 +6,8 @@
         <h1>Transform</h1>
       </header>
 
+      <app-tenant-browser (loaded)="onTenantTransform($event)" />
+
       <label class="field">
         <span>Example</span>
         <select [value]="exampleId()" (change)="loadExample($event)">

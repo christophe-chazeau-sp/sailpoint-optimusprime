@@ -23,6 +23,7 @@ npx ng test --watch=false
 ## What you can do
 
 - Load an example, paste JSON, or drop a `.json` file.
+- Connect to a tenant from the left pane. Sign in with a JWT access token, or with a client ID and secret. The tenant can be a name (`acme`), a UI address (`acme.identitynow.com`), or an API address (`acme.api.identitynow.com`); the API host is filled in when it is missing. After that, pick a transform from the list. Run the app locally (`npm start`) so the browser can reach the tenant.
 - Resize the source pane and hide either side pane.
 - Select a step to see its type, output, variables, and inputs. The input that the step actually used is highlighted.
 - Supply the implicit input and any account or identity attributes the transform reads. The diagram and the **Transform output** field update together.
