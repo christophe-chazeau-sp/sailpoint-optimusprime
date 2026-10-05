@@ -15,6 +15,7 @@ import { TransformGraph, TransformNodeModel } from './transform/model/transform-
 import { graphNode, parseTransform } from './transform/parser/transform-parser';
 import { presentNode } from './transform/presentation';
 import { nodeAtOffset, pathKey, SourceRange, sourceRanges } from './transform/source-range';
+import { APP_VERSION } from './version';
 
 const DEFAULT_LEFT_WIDTH = 380;
 const MIN_LEFT_WIDTH = 260;
@@ -74,6 +75,7 @@ function storedLeftOpen(): boolean {
   styleUrl: './app.scss',
 })
 export class App {
+  protected readonly version = APP_VERSION;
   protected readonly examples = TRANSFORM_EXAMPLES;
   protected readonly jsonText = signal(exampleText(DEFAULT_EXAMPLE_ID));
   protected readonly exampleId = signal(DEFAULT_EXAMPLE_ID);

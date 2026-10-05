@@ -1,12 +1,13 @@
 {
   "name": "sailpoint-optimusprime",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "prepare": "node scripts/install-hooks.mjs"
   },
   "private": true,
   "packageManager": "npm@11.19.0",

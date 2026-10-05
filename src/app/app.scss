@@ -5,6 +5,18 @@
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
 }
 
+.version {
+  position: fixed;
+  left: 12px;
+  bottom: 10px;
+  z-index: 5;
+  margin: 0;
+  color: #98a2b3;
+  font-size: 12px;
+  line-height: 16px;
+  pointer-events: none;
+}
+
 .shell {
   display: grid;
   grid-template-columns: 380px minmax(0, 1fr) auto;
