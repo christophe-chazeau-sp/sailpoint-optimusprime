@@ -172,11 +172,12 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       .map((connection) => {
         const source = editor.getNode(connection.source);
         const result = source?.result;
+        const literal = source?.model.kind === 'literal' ? source.model.attributes[0]?.value : undefined;
         const index = node.inputs[connection.targetInput]?.index ?? 0;
         return {
           index,
           key: connection.label || 'input',
-          text: result?.ok ? formatValue(result.value) : '',
+          text: result?.ok ? formatValue(result.value) : literal === undefined ? '' : formatValue(literal),
         };
       })
       .filter((item) => item.text !== '')

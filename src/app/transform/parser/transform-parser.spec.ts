@@ -93,6 +93,20 @@ describe('parseTransform', () => {
     ]);
   });
 
+  it('draws literal conditional branches as inputs', () => {
+    const example = TRANSFORM_EXAMPLES.find((item) => item.id === 'conditional');
+    const result = parseTransform(example?.document);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.graph.edges.map((edge) => edge.label)).toEqual(
+      expect.arrayContaining(['positiveCondition', 'negativeCondition', 'department']),
+    );
+    const positive = result.graph.nodes.find((node) => node.summary === 'true');
+    expect(positive?.kind).toBe('literal');
+  });
+
   it('connects static template variables and keeps the Velocity template', () => {
     const example = TRANSFORM_EXAMPLES.find((item) => item.id === 'static');
     const result = parseTransform(example?.document);

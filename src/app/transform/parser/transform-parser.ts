@@ -61,7 +61,7 @@ class GraphBuilder {
     const scalars: ScalarAttribute[] = [];
 
     for (const [key, attribute] of Object.entries(attributes)) {
-      this.absorb(key, attribute, [...path, 'attributes', key], children, scalars);
+      this.absorb(type, key, attribute, [...path, 'attributes', key], children, scalars);
     }
 
     this.appendRootMetadata(value, isRoot, scalars);
@@ -105,12 +105,22 @@ class GraphBuilder {
   }
 
   private absorb(
+    parentType: string,
     key: string,
     attribute: unknown,
     path: JsonPath,
     children: ChildLink[],
     scalars: ScalarAttribute[],
   ): void {
+    if (
+      parentType === 'conditional' &&
+      (key === 'positiveCondition' || key === 'negativeCondition') &&
+      !isTransform(attribute)
+    ) {
+      children.push({ key, label: key, childId: this.addLiteral(attribute, path) });
+      return;
+    }
+
     if (Array.isArray(attribute)) {
       if (attribute.length === 0) {
         scalars.push({ key, value: '[]' });
