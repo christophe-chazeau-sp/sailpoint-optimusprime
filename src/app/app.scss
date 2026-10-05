@@ -257,11 +257,15 @@ select {
   max-width: 100%;
   height: 36px;
   border-radius: 6px;
-  background: #e08a6b;
+  background: #0033a1;
   color: #fff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.file:hover {
+  background: #0071ce;
 }
 
 .file input {
