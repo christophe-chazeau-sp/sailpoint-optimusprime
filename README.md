@@ -33,7 +33,7 @@ npx ng test --watch=false
 
 The app calculates the common Identity Security Cloud transform types locally, including string operations, `firstValid`, `conditional`, `static` Velocity templates, lookup tables, and the date transforms (`dateFormat`, `dateMath`, `dateCompare`).
 
-A conditional may declare extra attributes as variables. Those are evaluated, shown on the action and in the right pane, and can be reused later in the branch as `$variableName`. A dashed arrow labeled with the variable name runs above the diagram from the conditional back to each step that reads it, and enters that step from the left. A replacement such as `#set($forceNull = null)$forceNull` produces null.
+A conditional may declare extra attributes as variables. Those are evaluated, shown on the action and in the right pane, and can be reused later in the branch as `$variableName`. A dashed arrow labeled with the variable name and its current value runs above the diagram from the conditional back to each step that reads it, and enters that step from the left. A replacement such as `#set($forceNull = null)$forceNull` produces null.
 
 Steps that were calculated are drawn with blue arrows. Branches that were not entered stay gray.
 

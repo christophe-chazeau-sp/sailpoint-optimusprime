@@ -217,7 +217,10 @@ export class TransformConnectionComponent {
 
   protected label(): string | null {
     const label = this.data?.label;
-    return label && !HIDDEN_LABELS.has(label) ? label : null;
+    if (!label || HIDDEN_LABELS.has(label)) {
+      return null;
+    }
+    return this.data?.reference && this.data.valueText ? `${label} ${this.data.valueText}` : label;
   }
 
   protected labelPoint(): Point {

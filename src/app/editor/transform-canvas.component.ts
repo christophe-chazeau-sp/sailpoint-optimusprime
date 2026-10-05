@@ -158,34 +158,37 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     for (const node of editor.getNodes()) {
       if (node.capsule === 'input' || node.capsule === 'output') {
         this.refreshEndpoint(node);
+        continue;
       }
+      node.result = this.results?.get(node.model.id);
     }
     for (const node of editor.getNodes()) {
       if (node.capsule === 'input' || node.capsule === 'output') {
         continue;
       }
-      const next = this.results?.get(node.model.id);
       if (node.capsule === 'literal') {
-        if (next !== node.result) {
-          node.result = next;
-          void area.update('node', node.id);
-        }
+        void area.update('node', node.id);
         continue;
       }
       const inputValues = this.inputValues(node);
       const inputsChanged = !sameInputs(node.inputValues, inputValues);
       node.inputValues = inputValues;
-      const height = this.nodeHeightFor(node, next);
-      if (next !== node.result || height !== node.height || inputsChanged) {
-        node.result = next;
+      const height = this.nodeHeightFor(node, node.result);
+      if (height !== node.height || inputsChanged) {
         node.height = height;
+        void area.update('node', node.id);
+      } else {
         void area.update('node', node.id);
       }
     }
     for (const connection of editor.getConnections()) {
       const active = this.connectionActive(connection);
-      if (connection.active !== active) {
+      const valueText = connection.reference
+        ? this.carriedText(connection, editor.getNode(connection.source)?.result, undefined)
+        : '';
+      if (connection.active !== active || connection.valueText !== valueText) {
         connection.active = active;
+        connection.valueText = valueText;
         void area.update('connection', connection.id);
       }
     }
