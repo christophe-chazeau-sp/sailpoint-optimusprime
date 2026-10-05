@@ -6,6 +6,15 @@
     @if (data.view.detail) {
       <span class="detail">{{ data.view.detail }}</span>
     }
+    @if (data.inputValues.length) {
+      <span class="inputs">
+        @for (input of data.inputValues; track input.key) {
+          <span class="io-line" [title]="input.key + ' ' + input.text">
+            <span class="io-name">in {{ input.key }}</span> {{ input.text }}
+          </span>
+        }
+      </span>
+    }
     @if (data.result?.variables; as variables) {
       <span class="variables">
         @for (variable of variables; track variable.name) {
@@ -24,8 +33,8 @@
       data-testid="node-result"
       [class.failed]="!result.ok && !result.upstream"
       [class.upstream]="!result.ok && result.upstream"
-      [title]="resultText(result)"
-      >{{ resultText(result) }}</span
+      [title]="'out ' + resultText(result)"
+      ><span class="io-name">out</span> {{ resultText(result) }}</span
     >
   }
 

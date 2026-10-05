@@ -3,18 +3,25 @@ import { StepResult } from '../transform/evaluator/evaluator';
 import { TransformNodeModel } from '../transform/model/transform-graph';
 import { NodePresentation } from '../transform/presentation';
 
+export interface NodeInputValue {
+  key: string;
+  text: string;
+}
+
 export type EditorNode = ClassicPreset.Node & {
   width: number;
   height: number;
   model: TransformNodeModel;
   view: NodePresentation;
   result?: StepResult;
+  inputValues: NodeInputValue[];
 };
 
 export class FlowNode extends ClassicPreset.Node {
   width = 300;
   height = 60;
   result?: StepResult;
+  inputValues: NodeInputValue[] = [];
 
   constructor(
     public readonly model: TransformNodeModel,

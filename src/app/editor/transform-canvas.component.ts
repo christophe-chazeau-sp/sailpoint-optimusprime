@@ -16,7 +16,7 @@ import { AngularArea2D, AngularPlugin, Presets } from 'rete-angular-plugin/22';
 import { AreaExtensions, AreaPlugin } from 'rete-area-plugin';
 import { AutoArrangePlugin, Preset as ArrangePreset } from 'rete-auto-arrange-plugin';
 import { getDOMSocketPosition } from 'rete-render-utils';
-import { StepResult } from '../transform/evaluator/evaluator';
+import { formatValue, StepResult } from '../transform/evaluator/evaluator';
 import { TransformGraph, TransformNodeModel } from '../transform/model/transform-graph';
 import { presentNode } from '../transform/presentation';
 import { AnchorSocketComponent } from './anchor-socket.component';
@@ -25,6 +25,7 @@ import {
   FlowConnection,
   FlowNode,
   inputAnchorRatio,
+  NodeInputValue,
   NODE_WIDTH,
   nodeHeight,
   variableHeight,
@@ -32,6 +33,13 @@ import {
 } from './flow-node';
 import { TransformConnectionComponent } from './transform-connection.component';
 import { TransformNodeComponent } from './transform-node.component';
+
+function sameInputs(current: NodeInputValue[], next: NodeInputValue[]): boolean {
+  return (
+    current.length === next.length &&
+    current.every((item, index) => item.key === next[index].key && item.text === next[index].text)
+  );
+}
 
 type Schemes = GetSchemes<EditorNode, FlowConnection>;
 type AreaExtra = AngularArea2D<Schemes>;
@@ -119,7 +127,10 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   private nodeHeightFor(node: EditorNode, result = node.result): number {
-    return nodeHeight(node.view, Object.keys(node.inputs).length, variableHeight(result?.variables?.length ?? 0));
+    const inputs = node.inputValues.length;
+    const extra =
+      variableHeight(result?.variables?.length ?? 0) + (inputs > 0 ? 6 + inputs * 16 : 0);
+    return nodeHeight(node.view, Object.keys(node.inputs).length, extra);
   }
 
   private applyResults(): void {
@@ -130,8 +141,11 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     }
     for (const node of editor.getNodes()) {
       const next = this.results?.get(node.model.id);
+      const inputValues = this.inputValues(node);
+      const inputsChanged = !sameInputs(node.inputValues, inputValues);
+      node.inputValues = inputValues;
       const height = this.nodeHeightFor(node, next);
-      if (next !== node.result || height !== node.height) {
+      if (next !== node.result || height !== node.height || inputsChanged) {
         node.result = next;
         node.height = height;
         void area.update('node', node.id);
@@ -144,6 +158,30 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
         void area.update('connection', connection.id);
       }
     }
+  }
+
+  /** Value carried into this node by each incoming arrow. */
+  private inputValues(node: EditorNode): NodeInputValue[] {
+    const editor = this.editor;
+    if (!editor) {
+      return [];
+    }
+    return editor
+      .getConnections()
+      .filter((connection) => connection.target === node.id)
+      .map((connection) => {
+        const source = editor.getNode(connection.source);
+        const result = source?.result;
+        const index = node.inputs[connection.targetInput]?.index ?? 0;
+        return {
+          index,
+          key: connection.label || 'input',
+          text: result?.ok ? formatValue(result.value) : '',
+        };
+      })
+      .filter((item) => item.text !== '')
+      .sort((left, right) => left.index - right.index)
+      .map(({ key, text }) => ({ key, text }));
   }
 
   /** An arrow is active when its source step was calculated. Implicit input follows its target. */
@@ -342,6 +380,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     await this.layoutNodes();
 
     await AreaExtensions.zoomAt(area, editor.getNodes(), { scale: FIT_SCALE });
+    this.applyResults();
     this.syncBackground(area);
     await this.syncSelection();
   }
