@@ -174,7 +174,7 @@
           @if (node.kind === 'operation') {
             <h3 class="section">Inputs</h3>
             @for (input of selectedInputs(); track input.key) {
-              <div class="field-group" data-testid="step-input">
+              <div class="field-group" [class.chosen-row]="input.chosen" data-testid="step-input">
                 <span class="field-label input-label">
                   {{ input.key }}
                   <small>{{ input.source }}</small>

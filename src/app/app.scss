@@ -233,9 +233,21 @@ select {
   font-weight: 600;
 }
 
+.field-group.chosen-row {
+  margin: 0 -8px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #e8f2fc;
+}
+
+.field-group.chosen-row .field-label {
+  color: #0033a1;
+}
+
 .output.chosen-value {
-  border-color: #4c6ef5;
-  box-shadow: 0 0 0 3px rgb(76 110 245 / 15%);
+  border-color: #0071ce;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgb(0 113 206 / 18%);
 }
 
 .output.skipped {
