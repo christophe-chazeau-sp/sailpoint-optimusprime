@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Component, HostBinding, Input, OnChanges } from '@angular/core';
 import { ClassicPreset } from 'rete';
 import { RefDirective } from 'rete-angular-plugin/22';
-import { formatValue, StepResult } from '../transform/evaluator/evaluator';
+import { DeclaredVariable, formatValue, StepResult } from '../transform/evaluator/evaluator';
 import { EditorNode, inputAnchorRatio } from './flow-node';
 
 interface Anchor {
@@ -73,6 +73,10 @@ export class TransformNodeComponent implements OnChanges {
 
   socketData(side: 'input' | 'output', key: string, socket: ClassicPreset.Socket | undefined) {
     return { type: 'socket', side, key, nodeId: this.data.id, payload: socket };
+  }
+
+  variableText(variable: DeclaredVariable): string {
+    return formatValue(variable.value);
   }
 
   resultText(result: StepResult): string {

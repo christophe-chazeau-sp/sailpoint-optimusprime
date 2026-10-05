@@ -6,6 +6,15 @@
     @if (data.view.detail) {
       <span class="detail">{{ data.view.detail }}</span>
     }
+    @if (data.result?.variables; as variables) {
+      <span class="variables">
+        @for (variable of variables; track variable.name) {
+          <span class="variable" [title]="variableText(variable)">
+            <span class="var-name">${{ variable.name }}</span> {{ variableText(variable) }}
+          </span>
+        }
+      </span>
+    }
   </div>
   <span class="menu" aria-hidden="true">•••</span>
 

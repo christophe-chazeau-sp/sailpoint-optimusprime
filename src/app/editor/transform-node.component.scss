@@ -98,6 +98,29 @@
   white-space: nowrap;
 }
 
+.variables {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  min-width: 0;
+}
+
+.variable {
+  overflow: hidden;
+  color: #344054;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.var-name {
+  color: #0033a1;
+  font-weight: 600;
+}
+
 .menu {
   flex: 0 0 auto;
   color: #475467;

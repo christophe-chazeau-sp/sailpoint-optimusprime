@@ -148,6 +148,15 @@
               <span class="field-label">Output</span>
               <div class="readonly mono output" [class.failed]="!result.ok">{{ resultText(result) }}</div>
             </div>
+            @if (result.variables; as variables) {
+              <h3 class="section">Variables</h3>
+              @for (variable of variables; track variable.name) {
+                <div class="field-group" data-testid="step-variable">
+                  <span class="field-label">${{ variable.name }}</span>
+                  <div class="readonly mono output">{{ formatValue(variable.value) }}</div>
+                </div>
+              }
+            }
           }
           @if (node.velocityTemplate) {
             <div class="field-group">

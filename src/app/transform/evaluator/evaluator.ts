@@ -6,7 +6,15 @@ import { renderTemplate, TemplateError, TemplateValue, TemplateVars } from './ve
 
 export type Value = string | number | boolean | null;
 
-export type StepResult = { ok: true; value: Value } | { ok: false; error: string; upstream?: boolean };
+/** A variable declared on a conditional, after it has been evaluated. */
+export interface DeclaredVariable {
+  name: string;
+  value: Value;
+}
+
+export type StepResult =
+  | { ok: true; value: Value; variables?: DeclaredVariable[] }
+  | { ok: false; error: string; upstream?: boolean; variables?: DeclaredVariable[] };
 
 export interface EvaluationInputs {
   /** Value of the source attribute the transform is mapped to; null when absent. */
@@ -102,7 +110,8 @@ export function evaluateTransform(document: unknown, inputs: EvaluationInputs): 
   const evaluator = new Evaluator(inputs);
   let result: StepResult;
   try {
-    result = { ok: true, value: evaluator.run(document as Record<string, unknown>, []) };
+    evaluator.run(document as Record<string, unknown>, []);
+    result = evaluator.steps.get(pathKey([]) as string) ?? { ok: true, value: null };
   } catch (error) {
     result = evaluator.steps.get(pathKey([]) as string) ?? { ok: false, error: describe(error) };
   }
@@ -141,7 +150,11 @@ export function stepInputs(
           source: lookupOperation(raw['type'])?.label ?? raw['type'],
           result: evaluation.steps.get(pathKey(rawPath) as string),
         }
-      : { key, source: 'Literal', result: { ok: true, value: toValue(raw) } as StepResult };
+      : {
+          key,
+          source: 'Literal',
+          result: evaluation.steps.get(pathKey(rawPath) as string) ?? { ok: true, value: toValue(raw) },
+        };
     rows.push({ ...row, chosen: row.key === chosen });
   };
 
@@ -190,6 +203,10 @@ class UpstreamError extends StepError {}
 class Evaluator {
   readonly steps = new Map<string, StepResult>();
   readonly choices = new Map<string, string>();
+  /** Variables declared by each conditional, keyed by the step path. */
+  private readonly declaredVariables = new Map<string, DeclaredVariable[]>();
+  /** Variable scopes of the conditionals currently being evaluated, innermost last. */
+  private readonly scopes: TemplateVars[] = [];
   private readonly now: Date;
   private depth = 0;
 
@@ -205,14 +222,14 @@ class Evaluator {
     this.depth++;
     try {
       const value = this.compute(node, path);
-      this.steps.set(key, { ok: true, value });
+      this.steps.set(key, this.withVariables(key, { ok: true, value }));
       return value;
     } catch (error) {
-      if (error instanceof UpstreamError) {
-        this.steps.set(key, { ok: false, error: 'An input of this step failed.', upstream: true });
-      } else {
-        this.steps.set(key, { ok: false, error: describe(error) });
-      }
+      const failure: StepResult =
+        error instanceof UpstreamError
+          ? { ok: false, error: 'An input of this step failed.', upstream: true }
+          : { ok: false, error: describe(error) };
+      this.steps.set(key, this.withVariables(key, failure));
       throw new UpstreamError(describe(error));
     } finally {
       this.depth--;
@@ -263,7 +280,7 @@ class Evaluator {
       case 'static':
         return this.render(String(at.value('value') ?? ''), at.variables(['value']));
       case 'conditional':
-        return this.conditional(at);
+        return this.conditional(at, path);
 
       case 'indexOf':
         return mapText(at.input(), (text) => text.indexOf(String(at.value('substring') ?? '')));
@@ -278,9 +295,7 @@ class Evaluator {
         return mapText(at.input(), (text) => split(text, at));
 
       case 'replace':
-        return mapText(at.input(), (text) =>
-          text.replace(regex(String(at.value('regex') ?? '')), String(at.value('replacement') ?? '')),
-        );
+        return this.replace(at);
       case 'replaceAll': {
         const table = attrs['table'];
         if (!isRecord(table)) {
@@ -385,13 +400,17 @@ class Evaluator {
     return null;
   }
 
-  private conditional(at: AttributeReader): Value {
+  private conditional(at: AttributeReader, path: JsonPath): Value {
     const expression = String(at.value('expression') ?? '');
     const match = /^\s*(.+?)\s+eq\s+(.+?)\s*$/.exec(expression);
     if (!match) {
       throw new StepError(`The expression "${expression}" must have the form "ValueA eq ValueB".`);
     }
     const vars = at.variables(['expression', 'positiveCondition', 'negativeCondition']);
+    this.declaredVariables.set(
+      pathKey(path) as string,
+      [...vars.entries()].map(([name, value]) => ({ name, value: value ?? null })),
+    );
     const side = (text: string) => {
       const name = /^\$\{?([A-Za-z_][\w-]*)\}?$/.exec(text);
       if (!name) return text;
@@ -401,7 +420,55 @@ class Evaluator {
     const equal = side(match[1]) === side(match[2]);
     const branch = equal ? 'positiveCondition' : 'negativeCondition';
     at.choose(branch);
-    return this.render(String(at.value(branch) ?? ''), vars);
+    this.scopes.push(vars);
+    try {
+      const chosen = at.value(branch);
+      return typeof chosen === 'string' ? this.render(chosen, vars) : (chosen ?? null);
+    } finally {
+      this.scopes.pop();
+    }
+  }
+
+  private replace(at: AttributeReader): Value {
+    const input = at.input();
+    if (input === null) {
+      return null;
+    }
+    const pattern = regex(String(at.value('regex') ?? ''));
+    const replacement = this.replacement(at.value('replacement'));
+    const text = String(input);
+    if (replacement === null) {
+      pattern.lastIndex = 0;
+      return pattern.test(text) ? null : text;
+    }
+    return text.replace(pattern, String(replacement));
+  }
+
+  /** Renders a replacement when it is a Velocity template, so #set($x = null)$x can yield null. */
+  private replacement(value: Value | undefined): Value {
+    if (typeof value !== 'string' || !looksLikeTemplate(value)) {
+      return value ?? '';
+    }
+    return this.render(value, new Map());
+  }
+
+  /** Substitutes $variables from the conditionals wrapped around the current step. */
+  resolveText(value: Value): Value {
+    if (typeof value !== 'string' || this.scopes.length === 0 || !looksLikeTemplate(value)) {
+      return value;
+    }
+    const scope: TemplateVars = new Map();
+    for (const frame of this.scopes) {
+      for (const [name, variable] of frame) {
+        scope.set(name, variable);
+      }
+    }
+    return this.render(value, scope);
+  }
+
+  private withVariables(key: string, result: StepResult): StepResult {
+    const variables = this.declaredVariables.get(key);
+    return variables?.length ? { ...result, variables } : result;
   }
 
   private dateCompare(at: AttributeReader): Value {
@@ -437,9 +504,14 @@ class Evaluator {
     if (isRecord(value) && typeof value['type'] === 'string') {
       return this.run(value, path);
     }
-    const literal = toValue(value);
+    const literal = this.resolveText(toValue(value));
     this.steps.set(pathKey(path) as string, { ok: true, value: literal });
     return literal;
+  }
+
+  /** Keeps the value a scalar attribute actually used, after $variable substitution. */
+  remember(path: JsonPath, value: Value): void {
+    this.steps.set(pathKey(path) as string, { ok: true, value });
   }
 
   implicitInput(): Value {
@@ -470,7 +542,10 @@ class AttributeReader {
       const value =
         isRecord(raw) && typeof raw['type'] === 'string'
           ? this.evaluator.evaluateChild(raw, [...this.path, 'attributes', key])
-          : toValue(raw);
+          : this.evaluator.resolveText(toValue(raw));
+      if (!(isRecord(raw) && typeof raw['type'] === 'string')) {
+        this.evaluator.remember([...this.path, 'attributes', key], value ?? null);
+      }
       this.cache.set(key, value);
     }
     return this.cache.get(key) ?? null;
@@ -531,6 +606,10 @@ class AttributeReader {
     }
     return vars;
   }
+}
+
+function looksLikeTemplate(value: string): boolean {
+  return /\$!?\{?[A-Za-z_]/.test(value) || /#\{?(?:set|if)\b/.test(value);
 }
 
 function nowDateMath(type: string, attributes: Record<string, unknown>): boolean {

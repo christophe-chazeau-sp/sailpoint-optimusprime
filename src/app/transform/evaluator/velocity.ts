@@ -21,7 +21,7 @@ interface Reference {
   methods: { name: string; args: string }[];
 }
 
-export function renderTemplate(template: string, vars: TemplateVars): string {
+export function renderTemplate(template: string, vars: TemplateVars): TemplateValue {
   const scope = new Map(vars);
   const parser = new TemplateParser(template);
   const nodes = parser.parseBlock([]).nodes;
@@ -37,16 +37,41 @@ export function templateNames(template: string): string[] {
   return [...names];
 }
 
-function renderNodes(nodes: Node[], scope: TemplateVars): string {
+function renderNodes(nodes: Node[], scope: TemplateVars): TemplateValue {
   let output = '';
+  let wrote = false;
+  let explicitNull = false;
+  const append = (value: TemplateValue) => {
+    if (value === null) {
+      explicitNull = true;
+      return;
+    }
+    if (value !== '') {
+      wrote = true;
+    }
+    output += String(value);
+  };
   for (const node of nodes) {
     switch (node.kind) {
       case 'text':
+        if (node.text) {
+          wrote = true;
+        }
         output += node.text;
         break;
       case 'ref': {
         const value = resolveReference(node.ref, scope);
-        output += value === null || value === undefined ? (node.ref.quiet ? '' : node.raw) : String(value);
+        if (value === null || value === undefined) {
+          // A variable set to null, as in #set($forceNull = null)$forceNull, yields null.
+          if (!node.ref.quiet && scope.get(node.ref.name) === null) {
+            explicitNull = true;
+          } else if (!node.ref.quiet) {
+            wrote = true;
+            output += node.raw;
+          }
+          break;
+        }
+        append(value);
         break;
       }
       case 'set':
@@ -56,12 +81,12 @@ function renderNodes(nodes: Node[], scope: TemplateVars): string {
         const branch = node.branches.find((item) =>
           truthy(evaluateExpression(item.condition, scope)),
         );
-        output += renderNodes(branch ? branch.body : node.otherwise, scope);
+        append(renderNodes(branch ? branch.body : node.otherwise, scope));
         break;
       }
     }
   }
-  return output;
+  return !wrote && explicitNull ? null : output;
 }
 
 function resolveReference(ref: Reference, scope: TemplateVars): TemplateValue | undefined {

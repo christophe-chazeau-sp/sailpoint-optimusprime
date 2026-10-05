@@ -53,9 +53,96 @@ describe('evaluateTransform', () => {
 
   it('chooses the conditional branch', () => {
     const science = { [accountKey('HR Source', 'department')]: 'Science' };
-    expect(run(example('conditional'), { accountAttributes: science }).result).toEqual({ ok: true, value: 'true' });
+    expect(run(example('conditional'), { accountAttributes: science }).result).toEqual({
+      ok: true,
+      value: 'true',
+      variables: [{ name: 'department', value: 'Science' }],
+    });
     expect(run(example('conditional'), { accountAttributes: { [accountKey('HR Source', 'department')]: 'Art' } }).result)
-      .toEqual({ ok: true, value: 'false' });
+      .toEqual({ ok: true, value: 'false', variables: [{ name: 'department', value: 'Art' }] });
+  });
+
+  it('evaluates variables declared on a conditional and reuses them in the branch', () => {
+    const document = {
+      type: 'firstValid',
+      attributes: {
+        ignoreErrors: true,
+        values: [
+          {
+            type: 'replace',
+            attributes: {
+              regex: 'NULL_VALUE',
+              replacement: '#set($forceNull = null)$forceNull',
+              input: {
+                type: 'conditional',
+                attributes: {
+                  termDate: {
+                    type: 'replace',
+                    attributes: {
+                      regex: '^(?!\\d{8}$).*$',
+                      replacement: 'ACTIVE',
+                      input: {
+                        type: 'firstValid',
+                        attributes: {
+                          values: [{ type: 'substring', attributes: { begin: 0 } }, 'ACTIVE'],
+                        },
+                      },
+                    },
+                  },
+                  expression: '$termDate eq ACTIVE',
+                  positiveCondition: 'O365-S',
+                  negativeCondition: {
+                    type: 'dateCompare',
+                    attributes: {
+                      firstDate: {
+                        type: 'dateFormat',
+                        attributes: {
+                          input: {
+                            type: 'replace',
+                            attributes: {
+                              regex: 'ACTIVE',
+                              replacement: '19991231',
+                              input: '$termDate',
+                            },
+                          },
+                          inputFormat: 'yyyyMMdd',
+                          outputFormat: 'ISO8601',
+                        },
+                      },
+                      secondDate: { type: 'dateMath', attributes: { expression: 'now-60d/d' } },
+                      operator: 'lt',
+                      positiveCondition: 'NULL_VALUE',
+                      negativeCondition: 'O365-S',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+    const active = run(document, { implicitInput: null });
+    const conditional = active.steps.get(pathKey(['attributes', 'values', 0, 'attributes', 'input']) as string);
+    expect(conditional).toMatchObject({
+      ok: true,
+      value: 'O365-S',
+      variables: [{ name: 'termDate', value: 'ACTIVE' }],
+    });
+    expect(active.result).toEqual({ ok: true, value: 'O365-S' });
+
+    const recent = run(document, { implicitInput: '20260901' });
+    expect(recent.steps.get(pathKey(['attributes', 'values', 0, 'attributes', 'input']) as string)).toMatchObject({
+      variables: [{ name: 'termDate', value: '20260901' }],
+      value: 'O365-S',
+    });
+
+    const ended = run(document, { implicitInput: '20200101' });
+    expect(ended.steps.get(pathKey(['attributes', 'values', 0, 'attributes', 'input']) as string)).toMatchObject({
+      variables: [{ name: 'termDate', value: '20200101' }],
+      value: 'NULL_VALUE',
+    });
+    expect(ended.result).toEqual({ ok: true, value: null });
   });
 
   it('formats and compares dates', () => {

@@ -27,6 +27,7 @@ import {
   inputAnchorRatio,
   NODE_WIDTH,
   nodeHeight,
+  variableHeight,
   valueSocket,
 } from './flow-node';
 import { TransformConnectionComponent } from './transform-connection.component';
@@ -107,6 +108,10 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     }
   }
 
+  private nodeHeightFor(node: EditorNode, result = node.result): number {
+    return nodeHeight(node.view, Object.keys(node.inputs).length, variableHeight(result?.variables?.length ?? 0));
+  }
+
   private applyResults(): void {
     const editor = this.editor;
     const area = this.area;
@@ -115,8 +120,10 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     }
     for (const node of editor.getNodes()) {
       const next = this.results?.get(node.model.id);
-      if (next !== node.result) {
+      const height = this.nodeHeightFor(node, next);
+      if (next !== node.result || height !== node.height) {
         node.result = next;
+        node.height = height;
         void area.update('node', node.id);
       }
     }
@@ -257,7 +264,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       node.result = this.results?.get(model.id);
       node.width = NODE_WIDTH;
       const inputCount = graph.edges.filter((edge) => edge.targetId === model.id).length;
-      node.height = nodeHeight(view, inputCount);
+      node.height = nodeHeight(view, inputCount, variableHeight(node.result?.variables?.length ?? 0));
       graph.edges
         .filter((edge) => edge.targetId === model.id)
         .forEach((edge, index) => {
