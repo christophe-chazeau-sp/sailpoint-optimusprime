@@ -1,8 +1,9 @@
-import { ChangeDetectorRef, Component, HostBinding, Input, OnChanges } from '@angular/core';
+import { ChangeDetectorRef, Component, HostBinding, Input, OnChanges, OnDestroy } from '@angular/core';
 import { ClassicPreset } from 'rete';
 import { RefDirective } from 'rete-angular-plugin/22';
 import { DeclaredVariable, formatValue, StepResult } from '../transform/evaluator/evaluator';
 import { EditorNode, inputAnchorRatio } from './flow-node';
+import { TooltipService } from './tooltip.service';
 
 interface Anchor {
   key: string;
@@ -20,19 +21,40 @@ interface Anchor {
     'data-testid': 'node',
   },
 })
-export class TransformNodeComponent implements OnChanges {
+export class TransformNodeComponent implements OnChanges, OnDestroy {
   @Input() data!: EditorNode;
   @Input() emit!: (payload: unknown) => void;
   @Input() rendered!: () => void;
 
+  readonly velocityHeading = 'Velocity expression';
   readonly velocityWarning =
-    'This step contains a Velocity expression. It is calculated here with a JavaScript Velocity engine, ' +
-    'which may behave differently from the tenant. Test it in the tenant before sending it to production.';
+    'This step is calculated here with a JavaScript Velocity engine, which may behave differently ' +
+    'from the tenant. Test it in the tenant before sending it to production.';
 
   seed = 0;
+  private velocityBubble: Element | null = null;
 
-  constructor(private readonly cdr: ChangeDetectorRef) {
+  constructor(
+    private readonly cdr: ChangeDetectorRef,
+    private readonly tooltip: TooltipService,
+  ) {
     this.cdr.detach();
+  }
+
+  showVelocityWarning(event: MouseEvent): void {
+    this.velocityBubble = event.currentTarget as Element;
+    this.tooltip.show(this.velocityBubble, this.velocityHeading, this.velocityWarning);
+  }
+
+  hideVelocityWarning(): void {
+    if (this.velocityBubble) {
+      this.tooltip.hide(this.velocityBubble);
+      this.velocityBubble = null;
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.hideVelocityWarning();
   }
 
   @HostBinding('style.width.px')

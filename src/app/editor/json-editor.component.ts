@@ -81,7 +81,11 @@ const editorTheme = EditorView.theme({
     color: '#98a2b3',
   },
   '.cm-activeLine': { backgroundColor: 'rgb(76 110 245 / 4%)' },
-  '.cm-line.cm-transform-line': { backgroundColor: '#e3e9fd' },
+  '.cm-line.cm-transform-line': { backgroundColor: 'rgb(76 110 245 / 14%)' },
+  '.cm-selectionBackground': { backgroundColor: '#c3d0fb' },
+  '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
+    backgroundColor: '#9fb3f7',
+  },
   '.cm-activeLineGutter': { backgroundColor: 'rgb(76 110 245 / 8%)' },
   '.cm-transform-highlight': {
     fontWeight: '700',

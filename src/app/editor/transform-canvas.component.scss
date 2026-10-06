@@ -50,6 +50,34 @@
   background: #e8f2fc;
 }
 
+.canvas-tools button.active {
+  border-color: #0033a1;
+  background: #e8f2fc;
+}
+
+:host ::ng-deep [data-testid='minimap'] {
+  right: 16px;
+  bottom: 16px;
+  overflow: hidden;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 12px 16px -4px rgb(16 24 40 / 10%), 0 4px 6px -2px rgb(16 24 40 / 5%);
+}
+
+:host ::ng-deep [data-testid='minimap-node'] {
+  border: 1px solid #8fa6f5;
+  border-radius: 2px;
+  background: #c3d0fb;
+}
+
+:host ::ng-deep [data-testid='minimap-viewport'] {
+  border: 1.5px solid #0033a1;
+  border-radius: 3px;
+  background: rgb(0 51 161 / 6%);
+  cursor: grab;
+}
+
 .mount-error {
   position: absolute;
   margin: 12px;

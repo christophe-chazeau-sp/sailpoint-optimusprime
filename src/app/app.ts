@@ -1,6 +1,7 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { JsonEditorComponent } from './editor/json-editor.component';
 import { TransformCanvasComponent } from './editor/transform-canvas.component';
+import { TooltipService } from './editor/tooltip.service';
 import { TenantBrowserComponent } from './tenant/tenant-browser.component';
 import {
   evaluateTransform,
@@ -77,6 +78,7 @@ function storedLeftOpen(): boolean {
 })
 export class App {
   protected readonly version = APP_VERSION;
+  protected readonly tooltip = inject(TooltipService);
   protected readonly examples = TRANSFORM_EXAMPLES;
   protected readonly jsonText = signal(exampleText(DEFAULT_EXAMPLE_ID));
   protected readonly exampleId = signal(DEFAULT_EXAMPLE_ID);

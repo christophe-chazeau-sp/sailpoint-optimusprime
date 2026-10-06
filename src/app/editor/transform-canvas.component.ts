@@ -15,6 +15,7 @@ import { ClassicPreset, GetSchemes, NodeEditor } from 'rete';
 import { AngularArea2D, AngularPlugin, Presets } from 'rete-angular-plugin/22';
 import { AreaExtensions, AreaPlugin } from 'rete-area-plugin';
 import { AutoArrangePlugin, Preset as ArrangePreset } from 'rete-auto-arrange-plugin';
+import { MinimapExtra, MinimapPlugin } from 'rete-minimap-plugin';
 import { getDOMSocketPosition } from 'rete-render-utils';
 import { formatValue, StepResult } from '../transform/evaluator/evaluator';
 import { TransformGraph, TransformNodeModel } from '../transform/model/transform-graph';
@@ -55,7 +56,7 @@ function sameInputs(current: NodeInputValue[], next: NodeInputValue[]): boolean 
 }
 
 type Schemes = GetSchemes<EditorNode, FlowConnection>;
-type AreaExtra = AngularArea2D<Schemes>;
+type AreaExtra = AngularArea2D<Schemes> | MinimapExtra;
 
 const TRANSFORM_INPUT_ID = 'transform-input';
 const TRANSFORM_OUTPUT_ID = 'transform-output';
@@ -110,8 +111,10 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
 
   readonly nodeSelected = output<TransformNodeModel | null>();
   protected readonly mountError = signal<string | null>(null);
+  protected readonly minimapOpen = signal(false);
 
   private editor?: NodeEditor<Schemes>;
+  private minimap?: MinimapPlugin<Schemes>;
   private area?: AreaPlugin<Schemes, AreaExtra>;
   private arrange?: AutoArrangePlugin<Schemes, AreaExtra>;
   private selection?: ReturnType<typeof AreaExtensions.selectableNodes>;
@@ -347,6 +350,17 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     await this.resetZoom();
   }
 
+  protected toggleMinimap(): void {
+    this.minimapOpen.update((open) => !open);
+    this.syncMinimap();
+  }
+
+  private syncMinimap(): void {
+    if (this.minimap) {
+      this.minimap.element.hidden = !this.minimapOpen();
+    }
+  }
+
   ngOnDestroy(): void {
     this.area?.destroy();
   }
@@ -365,6 +379,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     const area = new AreaPlugin<Schemes, AreaExtra>(this.host().nativeElement);
     const render = new AngularPlugin<Schemes, AreaExtra>({ injector: this.injector });
     const arrange = new AutoArrangePlugin<Schemes, AreaExtra>();
+    const minimap = new MinimapPlugin<Schemes>({ boundViewport: true });
 
     render.addPreset(
       Presets.classic.setup({
@@ -378,11 +393,14 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
         },
       }),
     );
+    render.addPreset(Presets.minimap.setup({ size: 180 }));
     arrange.addPreset(leftToRightPorts);
 
     editor.use(area);
     area.use(render);
     area.use(arrange);
+    area.use(minimap);
+    minimap.element.classList.add('minimap');
 
     this.selection = AreaExtensions.selectableNodes(area, AreaExtensions.selector(), {
       accumulating: AreaExtensions.accumulateOnCtrl(),
@@ -408,7 +426,11 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
         this.nodeSelected.emit(node?.model ?? null);
       } else if (context.type === 'pointerdown') {
         const target = context.data.event.target;
-        if (target instanceof Element && !target.closest('[data-testid="node"]')) {
+        if (
+          target instanceof Element &&
+          !target.closest('[data-testid="node"]') &&
+          !minimap.element.contains(target)
+        ) {
           this.nodeSelected.emit(null);
         }
       } else if (context.type === 'translated') {
@@ -423,6 +445,8 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     this.editor = editor;
     this.area = area;
     this.arrange = arrange;
+    this.minimap = minimap;
+    this.syncMinimap();
     this.mountGrid(area);
     this.ready = true;
   }

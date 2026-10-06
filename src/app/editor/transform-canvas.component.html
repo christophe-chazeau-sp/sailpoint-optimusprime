@@ -2,6 +2,20 @@
   <p class="mount-error">{{ message }}</p>
 }
 <div class="canvas-tools">
+  <button
+    type="button"
+    data-testid="minimap-toggle"
+    [attr.aria-label]="minimapOpen() ? 'Hide minimap' : 'Show minimap'"
+    [title]="minimapOpen() ? 'Hide minimap' : 'Show minimap'"
+    [attr.aria-pressed]="minimapOpen()"
+    [class.active]="minimapOpen()"
+    (click)="toggleMinimap()"
+  >
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M1.5 3.5 5.5 2l5 1.5 4-1.5v10.5l-4 1.5-5-1.5-4 1.5Z" />
+      <path d="M5.5 2v10.5M10.5 3.5V14" />
+    </svg>
+  </button>
   <button type="button" aria-label="Reset layout" title="Reset layout" (click)="resetLayout()">
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <rect x="2" y="2" width="5" height="4" />

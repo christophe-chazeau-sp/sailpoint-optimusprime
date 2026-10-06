@@ -1,9 +1,12 @@
 <div class="shell" [class.resizing]="resizing()" [style.grid-template-columns]="shellColumns()">
   <aside class="pane source" [class.collapsed]="!leftOpen()">
     @if (leftOpen()) {
-      <header>
-        <p class="eyebrow">Identity Security Cloud</p>
-        <h1>Transform</h1>
+      <header class="brand">
+        <img class="logo" src="sailpoint-logo.svg" alt="SailPoint" width="36" height="36" />
+        <div>
+          <p class="eyebrow">Identity Security Cloud</p>
+          <h1>Transform</h1>
+        </div>
       </header>
 
       <app-tenant-browser (loaded)="onTenantTransform($event)" />
@@ -52,10 +55,6 @@
           } @empty {
             <p class="test-empty">This transform does not need any input values.</p>
           }
-        </div>
-        <div class="test-result" [class.failed]="!evaluation().result.ok" data-testid="result">
-          <span class="test-label">Result</span>
-          <output>{{ resultText(evaluation().result) }}</output>
         </div>
       </section>
 
@@ -123,11 +122,9 @@
 
     @if (inspectorOpen()) {
       <div class="inspector-body">
-        <div class="field-group" data-testid="transform-output">
-          <span class="field-label">Transform output</span>
-          <div class="readonly mono output" [class.failed]="!evaluation().result.ok">
-            {{ resultText(evaluation().result) }}
-          </div>
+        <div class="test-result" [class.failed]="!evaluation().result.ok" data-testid="result">
+          <span class="test-label">Transform output</span>
+          <output>{{ resultText(evaluation().result) }}</output>
         </div>
         @if (selected(); as node) {
           <h2 class="inspector-title">{{ selectedView()?.title }}</h2>
@@ -228,3 +225,16 @@
   </aside>
 </div>
 <p class="version">v{{ version }}</p>
+@if (tooltip.current(); as tip) {
+  <div
+    class="tooltip"
+    [class.below]="tip.below"
+    role="tooltip"
+    data-testid="tooltip"
+    [style.left.px]="tip.x"
+    [style.top.px]="tip.y"
+  >
+    <strong>{{ tip.heading }}</strong>
+    <span>{{ tip.text }}</span>
+  </div>
+}

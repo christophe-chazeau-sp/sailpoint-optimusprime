@@ -1,6 +1,6 @@
 {
   "name": "sailpoint-optimusprime",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -33,6 +33,7 @@
     "rete-area-plugin": "^2.3.2",
     "rete-auto-arrange-plugin": "^2.0.2",
     "rete-connection-plugin": "^2.0.5",
+    "rete-minimap-plugin": "^2.0.3",
     "rete-render-utils": "^2.0.3",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",

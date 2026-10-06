@@ -31,8 +31,10 @@
       class="velocity"
       data-testid="velocity-warning"
       role="img"
-      [attr.aria-label]="velocityWarning"
-      [title]="velocityWarning"
+      [attr.aria-label]="velocityHeading + '. ' + velocityWarning"
+      title=""
+      (mouseenter)="showVelocityWarning($event)"
+      (mouseleave)="hideVelocityWarning()"
       >V</span
     >
   }
