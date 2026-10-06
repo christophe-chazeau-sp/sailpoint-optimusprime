@@ -115,6 +115,9 @@ export class JsonEditorComponent implements AfterViewInit, OnChanges, OnDestroy 
 
   @Input() value = '';
   @Input() highlight: SourceRange | null = null;
+  /** Read once, when the editor is created. */
+  @Input() readOnly = false;
+  @Input() label = 'Transform JSON';
 
   readonly valueChange = output<string>();
   readonly cursorMove = output<number>();
@@ -129,12 +132,13 @@ export class JsonEditorComponent implements AfterViewInit, OnChanges, OnDestroy 
         extensions: [
           basicSetup,
           json(),
-          linter(jsonParseLinter()),
-          lintGutter(),
+          ...(this.readOnly
+            ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
+            : [linter(jsonParseLinter()), lintGutter()]),
           syntaxHighlighting(jsonColors),
           highlightField,
           editorTheme,
-          EditorView.contentAttributes.of({ 'aria-label': 'Transform JSON' }),
+          EditorView.contentAttributes.of({ 'aria-label': this.label }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               if (update.transactions.some((tr) => tr.annotation(Transaction.userEvent) !== undefined)) {

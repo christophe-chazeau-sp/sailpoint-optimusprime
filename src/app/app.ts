@@ -153,10 +153,31 @@ export class App {
 
   protected readonly highlight = computed<SourceRange | null>(() => {
     const node = this.selected();
-    if (!node?.path || node.path.length === 0) {
+    if (!node?.path) {
       return null;
     }
     return this.ranges().get(node.id) ?? null;
+  });
+
+  /** The selected block's own JSON, re-indented on its own. */
+  protected readonly selectedJson = computed(() => {
+    const node = this.selected();
+    if (!node?.path) {
+      return null;
+    }
+    let value: unknown = this.document();
+    for (const part of node.path) {
+      if (value === null || typeof value !== 'object') {
+        return null;
+      }
+      value = (value as Record<string | number, unknown>)[part];
+    }
+    return value === undefined ? null : JSON.stringify(value, null, 2);
+  });
+
+  protected readonly selectedJsonHeight = computed(() => {
+    const lines = this.selectedJson()?.split('\n').length ?? 0;
+    return `${Math.min(420, lines * 19 + 14)}px`;
   });
 
   protected toggleInspector(): void {

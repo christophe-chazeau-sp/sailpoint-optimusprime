@@ -2,6 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import { App, LEFT_PANE_OPEN_KEY, LEFT_PANE_WIDTH_KEY } from './app';
 
 describe('App', () => {
+  beforeAll(() => {
+    // jsdom has no layout; CodeMirror measures text through these when it renders.
+    Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList;
+    Range.prototype.getBoundingClientRect ??= () => new DOMRect();
+  });
+
   beforeEach(async () => {
     try {
       localStorage.removeItem(LEFT_PANE_WIDTH_KEY);

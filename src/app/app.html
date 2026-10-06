@@ -208,6 +208,18 @@
               <p class="empty">No configuration attributes.</p>
             }
           }
+
+          @if (selectedJson(); as json) {
+            <h3 class="section">JSON</h3>
+            <app-json-editor
+              class="json-preview"
+              data-testid="selected-json"
+              [value]="json"
+              [readOnly]="true"
+              label="Selected block JSON"
+              [style.height]="selectedJsonHeight()"
+            />
+          }
         } @else {
           <p class="empty">Select a step to see its configuration.</p>
         }
