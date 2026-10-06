@@ -6,10 +6,29 @@ interface Point {
   y: number;
 }
 
+interface Route {
+  start: Point;
+  end: Point;
+  vertical: boolean;
+}
+
+interface Shape {
+  points: Point[];
+  end: Point;
+  base: Point;
+  /** Last bend before the arrowhead, used to centre the label on the final segment. */
+  corner: Point;
+  vertical: boolean;
+}
+
 const HIDDEN_LABELS = new Set(['input', 'Implicit input']);
 const CORNER_RADIUS = 12;
 const ARROW_LENGTH = 9;
 const ARROW_HALF = 4.5;
+const SELECTION_RING = 6;
+/** Boxes closer than this on one axis count as overlapping on it. */
+const SIDE_GAP = 16;
+const STRAIGHT_SNAP = 4;
 
 @Component({
   selector: 'app-transform-connection',
@@ -121,38 +140,118 @@ export class TransformConnectionComponent {
     if (around) {
       return roundedPath(around);
     }
-    const { start, end } = this;
-    const stop = this.arrowBase();
-    if (!start || !end || !stop) {
-      return '';
-    }
-    if (Math.abs(start.y - end.y) < 1) {
-      return `M ${start.x} ${start.y} H ${stop.x}`;
-    }
-    const middle = start.x + (end.x - start.x) / 2;
-    const rightward = end.x >= start.x ? 1 : -1;
-    const downward = end.y >= start.y ? 1 : -1;
-    const radius = this.cornerRadius();
-    return [
-      `M ${start.x} ${start.y}`,
-      `H ${middle - rightward * radius}`,
-      `Q ${middle} ${start.y} ${middle} ${start.y + downward * radius}`,
-      `V ${end.y - downward * radius}`,
-      `Q ${middle} ${end.y} ${middle + rightward * radius} ${end.y}`,
-      `H ${stop.x}`,
-    ].join(' ');
+    const shape = this.shape();
+    return shape ? roundedPath(shape.points) : '';
   }
 
   /** Triangle pointing into the target box, so the line reads as an input. */
   protected arrowPoints(): string | null {
-    const { end } = this;
-    const base = this.arrowBase();
-    if (!end || !base || base.x === end.x) {
+    const tip = this.data?.reference ? this.end : this.shape()?.end;
+    const base = this.data?.reference ? this.arrowBase() : this.shape()?.base;
+    if (!tip || !base) {
       return null;
     }
-    const scale = Math.abs(end.x - base.x) / ARROW_LENGTH;
-    const half = ARROW_HALF * scale;
-    return `${end.x},${end.y} ${base.x},${end.y - half} ${base.x},${end.y + half}`;
+    const length = Math.hypot(tip.x - base.x, tip.y - base.y);
+    if (length < 0.5) {
+      return null;
+    }
+    const half = (ARROW_HALF * length) / ARROW_LENGTH;
+    const normalX = (-(tip.y - base.y) / length) * half;
+    const normalY = ((tip.x - base.x) / length) * half;
+    return `${tip.x},${tip.y} ${base.x + normalX},${base.y + normalY} ${base.x - normalX},${base.y - normalY}`;
+  }
+
+  /**
+   * Picks the sides of the two boxes that face each other, then lays out a stepped line between them.
+   * Vertical routes are computed with x and y swapped so both directions share one layout.
+   */
+  private shape(): Shape | null {
+    const route = this.route();
+    if (!route) {
+      return null;
+    }
+    const flip = (point: Point): Point => (route.vertical ? { x: point.y, y: point.x } : point);
+    const start = flip(route.start);
+    const straight = Math.abs(start.y - flip(route.end).y) < STRAIGHT_SNAP;
+    // A near miss would draw a tiny kink, so a nearly aligned arrow snaps to a straight line.
+    const end = straight ? { x: flip(route.end).x, y: start.y } : flip(route.end);
+    const forward = end.x >= start.x ? 1 : -1;
+    const middle = start.x + (end.x - start.x) / 2;
+    const radius = Math.max(
+      0,
+      Math.min(CORNER_RADIUS, Math.abs(end.x - start.x) / 2, Math.abs(end.y - start.y) / 2),
+    );
+    const neck = straight ? start.x : middle + forward * radius;
+    const length = Math.min(ARROW_LENGTH, Math.max(0, Math.abs(end.x - neck) - 1));
+    const base = { x: end.x - forward * length, y: end.y };
+    const points = straight
+      ? [start, base]
+      : [start, { x: middle, y: start.y }, { x: middle, y: end.y }, base];
+    return {
+      points: points.map(flip),
+      end: flip(end),
+      base: flip(base),
+      corner: flip({ x: straight ? start.x : middle, y: end.y }),
+      vertical: route.vertical,
+    };
+  }
+
+  private route(): Route | null {
+    const { start, end } = this;
+    if (!start || !end) {
+      return null;
+    }
+    const source = this.data?.geometry?.(this.data.source);
+    const target = this.data?.geometry?.(this.data.target);
+    if (!source || !target) {
+      return { start, end, vertical: false };
+    }
+    // The selection ring is a 6px box-shadow drawn outside the card (see transform-node.component.scss).
+    const sourceRing = source.selected ? SELECTION_RING : 0;
+    const targetRing = target.selected ? SELECTION_RING : 0;
+    const sourceRight = source.left + source.width;
+    const targetRight = target.left + target.width;
+    const sourceBottom = source.top + source.height;
+    const targetBottom = target.top + target.height;
+    const ahead = target.left - sourceRight;
+    const behind = source.left - targetRight;
+    const below = target.top - sourceBottom;
+    const above = source.top - targetBottom;
+    const overlapping = Math.max(ahead, behind, below, above) < SIDE_GAP;
+
+    if (ahead >= SIDE_GAP || overlapping) {
+      return {
+        start: { x: sourceRight + sourceRing, y: start.y },
+        end: { x: target.left - targetRing, y: end.y },
+        vertical: false,
+      };
+    }
+    if (behind >= SIDE_GAP) {
+      return {
+        start: { x: source.left - sourceRing, y: start.y },
+        end: { x: targetRight + targetRing, y: end.y },
+        vertical: false,
+      };
+    }
+    // Stacked boxes: a single input drops straight in; several keep their order along the facing edge.
+    const sourceX = source.left + source.width / 2;
+    const ratio = target.height > 0 ? Math.min(1, Math.max(0, (end.y - target.top) / target.height)) : 0.5;
+    const edge = Math.min(CORNER_RADIUS, target.width / 2);
+    const targetX =
+      target.inputs <= 1
+        ? Math.min(targetRight - edge, Math.max(target.left + edge, sourceX))
+        : target.left + target.width * ratio;
+    return below >= SIDE_GAP
+      ? {
+          start: { x: sourceX, y: sourceBottom + sourceRing },
+          end: { x: targetX, y: target.top - targetRing },
+          vertical: true,
+        }
+      : {
+          start: { x: sourceX, y: source.top - sourceRing },
+          end: { x: targetX, y: targetBottom + targetRing },
+          vertical: true,
+        };
   }
 
   /**
@@ -177,34 +276,10 @@ export class TransformConnectionComponent {
     ];
   }
 
-  /** Where the stroke stops so it meets the base of the arrow. */
+  /** Where a variable arrow's stroke stops so it meets the base of the arrowhead. */
   private arrowBase(): Point | null {
-    const { start, end } = this;
-    if (!start || !end) {
-      return null;
-    }
-    if (this.data?.reference) {
-      return { x: end.x - ARROW_LENGTH, y: end.y };
-    }
-    const rightward = end.x >= start.x ? 1 : -1;
-    const straight = Math.abs(start.y - end.y) < 1;
-    const neck = straight
-      ? start.x
-      : start.x + (end.x - start.x) / 2 + rightward * this.cornerRadius();
-    const room = Math.max(0, Math.abs(end.x - neck) - 1);
-    const length = Math.min(ARROW_LENGTH, room);
-    return { x: end.x - rightward * length, y: end.y };
-  }
-
-  private cornerRadius(): number {
-    const { start, end } = this;
-    if (!start || !end) {
-      return 0;
-    }
-    return Math.max(
-      0,
-      Math.min(CORNER_RADIUS, Math.abs(end.x - start.x) / 2, Math.abs(end.y - start.y) / 2),
-    );
+    const { end } = this;
+    return end ? { x: end.x - ARROW_LENGTH, y: end.y } : null;
   }
 
   protected active(): boolean {
@@ -230,14 +305,16 @@ export class TransformConnectionComponent {
       const right = points[3];
       return { x: (left.x + right.x) / 2, y: left.y - 14 };
     }
-    const { start, end } = this;
-    const base = this.arrowBase();
-    if (!start || !end || !base) {
+    const shape = this.shape();
+    if (!shape) {
       return { x: 0, y: 0 };
     }
-    const cornerX =
-      Math.abs(start.y - end.y) < 1 ? start.x : start.x + (end.x - start.x) / 2;
-    return { x: (cornerX + base.x) / 2, y: end.y - 10 };
+    const { corner, base } = shape;
+    if (shape.vertical) {
+      const text = this.label() ?? '';
+      return { x: base.x + this.labelWidth(text) / 2 + 4, y: (corner.y + base.y) / 2 };
+    }
+    return { x: (corner.x + base.x) / 2, y: base.y - 10 };
   }
 
   protected labelWidth(text: string): number {

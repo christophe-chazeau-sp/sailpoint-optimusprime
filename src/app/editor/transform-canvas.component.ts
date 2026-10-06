@@ -29,6 +29,7 @@ import {
   FlowNode,
   inputAnchorRatio,
   NodeInputValue,
+  NodeRect,
   NODE_WIDTH,
   nodeHeight,
   variableHeight,
@@ -345,6 +346,55 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     await this.resetZoom();
   }
 
+  private readonly nodeRect = (nodeId: string): NodeRect | undefined => {
+    const node = this.editor?.getNode(nodeId);
+    const view = this.area?.nodeViews.get(nodeId);
+    if (!node || !view) {
+      return undefined;
+    }
+    return {
+      left: view.position.x,
+      top: view.position.y,
+      width: node.width,
+      height: node.height,
+      selected: Boolean(node.selected),
+      inputs: Object.keys(node.inputs).length,
+    };
+  };
+
+  private connectionRefresh = 0;
+  private readonly selectedNodes = new Set<string>();
+
+  private scheduleConnectionRefresh(): void {
+    if (this.connectionRefresh) {
+      return;
+    }
+    this.connectionRefresh = requestAnimationFrame(() => {
+      this.connectionRefresh = 0;
+      const editor = this.editor;
+      const area = this.area;
+      if (!editor || !area) {
+        return;
+      }
+      const changed = new Set<string>();
+      for (const node of editor.getNodes()) {
+        if (Boolean(node.selected) !== this.selectedNodes.has(node.id)) {
+          changed.add(node.id);
+          if (node.selected) {
+            this.selectedNodes.add(node.id);
+          } else {
+            this.selectedNodes.delete(node.id);
+          }
+        }
+      }
+      for (const connection of editor.getConnections()) {
+        if (changed.has(connection.source) || changed.has(connection.target)) {
+          void area.update('connection', connection.id);
+        }
+      }
+    });
+  }
+
   protected toggleMinimap(): void {
     this.minimapOpen.update((open) => !open);
     this.syncMinimap();
@@ -358,6 +408,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   ngOnDestroy(): void {
+    cancelAnimationFrame(this.connectionRefresh);
     this.area?.destroy();
   }
 
@@ -392,6 +443,12 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     render.addPreset(Presets.minimap.setup({ size: 180 }));
     arrange.addPreset(leftToRightPorts);
 
+    editor.addPipe((context) => {
+      if (context.type === 'connectioncreate') {
+        context.data.geometry = this.nodeRect;
+      }
+      return context;
+    });
     editor.use(area);
     area.use(render);
     area.use(arrange);
@@ -412,6 +469,8 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
           context.data.element.style.pointerEvents = 'none';
         } else if (context.data.type === 'node') {
           context.data.element.style.zIndex = '1';
+          // Selecting or unselecting re-renders the box; its arrows then move to or off the ring.
+          this.scheduleConnectionRefresh();
         }
       }
       if (context.type === 'nodepicked') {

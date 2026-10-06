@@ -39,7 +39,19 @@ export class FlowNode extends ClassicPreset.Node {
   }
 }
 
+/** Where a box currently sits on the canvas, in content coordinates. */
+export interface NodeRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  selected: boolean;
+  inputs: number;
+}
+
 export class FlowConnection extends ClassicPreset.Connection<ClassicPreset.Node, ClassicPreset.Node> {
+  /** Looks up a box's current place so the arrow can pick the sides that face each other. */
+  geometry?: (nodeId: string) => NodeRect | undefined;
   /** The source step was calculated for the current test values. */
   active = false;
   /** Dashed arrow from a conditional to a step that reads one of its variables. */
