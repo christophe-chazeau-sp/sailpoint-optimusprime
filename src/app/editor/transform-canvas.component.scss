@@ -6,6 +6,13 @@
   min-height: 0;
   overflow: hidden;
   background-color: #fff;
+  background-image:
+    radial-gradient(circle, #c5cee4 1px, transparent 1.2px),
+    radial-gradient(circle, #c5cee4 1px, transparent 1.2px);
+  background-size: 22px 44px;
+  background-position:
+    0 0,
+    11px 22px;
 }
 
 .canvas-host {

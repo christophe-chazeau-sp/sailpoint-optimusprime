@@ -61,9 +61,6 @@ type AreaExtra = AngularArea2D<Schemes> | MinimapExtra;
 const TRANSFORM_INPUT_ID = 'transform-input';
 const TRANSFORM_OUTPUT_ID = 'transform-output';
 
-const DOT_SPACING = 22;
-const DOT_RADIUS = 1;
-const MIN_DOT_GAP = 8;
 const PORT_SIZE = 2;
 const FIT_SCALE = 0.85;
 
@@ -332,9 +329,6 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
 
   protected async resetLayout(): Promise<void> {
     await this.layoutNodes();
-    if (this.area) {
-      this.syncBackground(this.area);
-    }
   }
 
   protected async resetZoom(): Promise<void> {
@@ -344,7 +338,6 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       return;
     }
     await AreaExtensions.zoomAt(area, editor.getNodes(), { scale: FIT_SCALE });
-    this.syncBackground(area);
   }
 
   protected async resetEverything(): Promise<void> {
@@ -437,10 +430,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
           this.nodeSelected.emit(null);
         }
       } else if (context.type === 'translated') {
-        this.syncBackground(area);
         this.updateReferenceLanes();
-      } else if (context.type === 'zoomed' || context.type === 'resized') {
-        this.syncBackground(area);
       }
       return context;
     });
@@ -450,49 +440,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     this.arrange = arrange;
     this.minimap = minimap;
     this.syncMinimap();
-    this.mountGrid(area);
     this.ready = true;
-  }
-
-  private grid?: HTMLElement;
-
-  /** The dot grid lives inside the zoomed layer, so it pans and zooms with the boxes. */
-  private mountGrid(area: AreaPlugin<Schemes, AreaExtra>): void {
-    const grid = document.createElement('div');
-    grid.style.position = 'absolute';
-    grid.style.zIndex = '0';
-    grid.style.pointerEvents = 'none';
-    area.area.content.holder.prepend(grid);
-    this.grid = grid;
-    this.syncBackground(area);
-  }
-
-  private syncBackground(area: AreaPlugin<Schemes, AreaExtra>): void {
-    const grid = this.grid;
-    if (!grid) {
-      return;
-    }
-    const { x, y, k } = area.area.transform;
-    const width = this.host().nativeElement.clientWidth;
-    const height = this.host().nativeElement.clientHeight;
-    const margin = DOT_SPACING * 4;
-    const left = -x / k - margin;
-    const top = -y / k - margin;
-    grid.style.left = `${left}px`;
-    grid.style.top = `${top}px`;
-    grid.style.width = `${width / k + margin * 2}px`;
-    grid.style.height = `${height / k + margin * 2}px`;
-    // The spacing follows the zoom, but each dot keeps the same size on screen.
-    const dot = `radial-gradient(circle, #c5cee4 ${DOT_RADIUS / k}px, transparent ${(DOT_RADIUS * 1.2) / k}px)`;
-    grid.style.backgroundImage = `${dot}, ${dot}`;
-    // Doubling keeps a subset of the same dots, so a sparser grid still lines up with the boxes.
-    let step = DOT_SPACING;
-    while (step * k < MIN_DOT_GAP) {
-      step *= 2;
-    }
-    grid.style.backgroundSize = `${step}px ${step * 2}px, ${step}px ${step * 2}px`;
-    // Keep dots locked to the canvas, not to this covering element's corner.
-    grid.style.backgroundPosition = `${-left}px ${-top}px, ${-left + step / 2}px ${-top + step}px`;
   }
 
   /** Runs one draw at a time so a newer document cannot leave the previous arrows behind. */
@@ -590,7 +538,6 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     await this.layoutNodes();
 
     await AreaExtensions.zoomAt(area, editor.getNodes(), { scale: FIT_SCALE });
-    this.syncBackground(area);
     await this.syncSelection();
   }
 
@@ -618,9 +565,6 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       // A failed removal must not keep the previous arrows on screen.
     }
     this.area?.area.content.holder.replaceChildren();
-    if (this.grid && this.area) {
-      this.area.area.content.holder.prepend(this.grid);
-    }
     this.area?.nodeViews.clear();
     this.area?.connectionViews.clear();
   }
