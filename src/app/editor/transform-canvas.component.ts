@@ -62,6 +62,8 @@ const TRANSFORM_INPUT_ID = 'transform-input';
 const TRANSFORM_OUTPUT_ID = 'transform-output';
 
 const DOT_SPACING = 22;
+const DOT_RADIUS = 1;
+const MIN_DOT_GAP = 8;
 const PORT_SIZE = 2;
 const FIT_SCALE = 0.85;
 
@@ -357,7 +359,8 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
 
   private syncMinimap(): void {
     if (this.minimap) {
-      this.minimap.element.hidden = !this.minimapOpen();
+      // display: none would zero the width the minimap measures, so it would draw empty when reopened.
+      this.minimap.element.style.visibility = this.minimapOpen() ? 'visible' : 'hidden';
     }
   }
 
@@ -453,15 +456,12 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
 
   private grid?: HTMLElement;
 
-  /** The dot grid lives inside the zoomed layer, so it scales and pans with the boxes. */
+  /** The dot grid lives inside the zoomed layer, so it pans and zooms with the boxes. */
   private mountGrid(area: AreaPlugin<Schemes, AreaExtra>): void {
     const grid = document.createElement('div');
     grid.style.position = 'absolute';
     grid.style.zIndex = '0';
     grid.style.pointerEvents = 'none';
-    grid.style.backgroundImage =
-      'radial-gradient(circle, #c5cee4 1px, transparent 1.2px), radial-gradient(circle, #c5cee4 1px, transparent 1.2px)';
-    grid.style.backgroundSize = `${DOT_SPACING}px ${DOT_SPACING * 2}px, ${DOT_SPACING}px ${DOT_SPACING * 2}px`;
     area.area.content.holder.prepend(grid);
     this.grid = grid;
     this.syncBackground(area);
@@ -482,8 +482,17 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     grid.style.top = `${top}px`;
     grid.style.width = `${width / k + margin * 2}px`;
     grid.style.height = `${height / k + margin * 2}px`;
+    // The spacing follows the zoom, but each dot keeps the same size on screen.
+    const dot = `radial-gradient(circle, #c5cee4 ${DOT_RADIUS / k}px, transparent ${(DOT_RADIUS * 1.2) / k}px)`;
+    grid.style.backgroundImage = `${dot}, ${dot}`;
+    // Doubling keeps a subset of the same dots, so a sparser grid still lines up with the boxes.
+    let step = DOT_SPACING;
+    while (step * k < MIN_DOT_GAP) {
+      step *= 2;
+    }
+    grid.style.backgroundSize = `${step}px ${step * 2}px, ${step}px ${step * 2}px`;
     // Keep dots locked to the canvas, not to this covering element's corner.
-    grid.style.backgroundPosition = `${-left}px ${-top}px, ${-left + DOT_SPACING / 2}px ${-top + DOT_SPACING}px`;
+    grid.style.backgroundPosition = `${-left}px ${-top}px, ${-left + step / 2}px ${-top + step}px`;
   }
 
   /** Runs one draw at a time so a newer document cannot leave the previous arrows behind. */
