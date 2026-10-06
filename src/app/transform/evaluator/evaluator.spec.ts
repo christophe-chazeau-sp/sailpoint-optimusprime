@@ -129,7 +129,9 @@ describe('evaluateTransform', () => {
       value: 'O365-S',
       variables: [{ name: 'termDate', value: 'ACTIVE' }],
     });
-    expect(active.result).toEqual({ ok: true, value: 'O365-S' });
+    // The tenant fails the forceNull replacement even when the regex does not match, and firstValid ignores it.
+    expect(active.steps.get(pathKey(['attributes', 'values', 0]) as string)).toMatchObject({ ok: false });
+    expect(active.result).toEqual({ ok: true, value: null });
 
     const recent = run(document, { implicitInput: '20260901' });
     expect(recent.steps.get(pathKey(['attributes', 'values', 0, 'attributes', 'input']) as string)).toMatchObject({
@@ -179,7 +181,7 @@ describe('evaluateTransform', () => {
       [{ type: 'lookup', attributes: { input: 'US', table: { US: 'United States', default: '?' } } }, 'United States'],
       [{ type: 'e164phone', attributes: { input: '(512) 555-0100', defaultRegion: 'US' } }, '+15125550100'],
       [{ type: 'iso3166', attributes: { input: 'France' } }, 'FR'],
-      [{ type: 'dateMath', attributes: { expression: 'now+1d/d' } }, '2026-10-06T00:00:00.000Z'],
+      [{ type: 'dateMath', attributes: { expression: 'now+1d/d' } }, '2026-10-06T00:00Z'],
       [{ type: 'static', attributes: { value: '#if($a == "x")yes#{else}no#end', a: 'x' } }, 'yes'],
     ];
     for (const [document, expected] of cases) {

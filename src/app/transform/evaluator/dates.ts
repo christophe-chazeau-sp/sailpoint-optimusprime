@@ -32,6 +32,9 @@ export function parseDate(text: string, format = 'ISO8601'): Date {
   const value = text.trim();
   switch (format) {
     case 'ISO8601':
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}(Z|[+-]\d{2}:?\d{2})$/.test(value)) {
+        throw new DateError(`"${text}" is not in the ISO8601 form yyyy-MM-ddTHH:mm:ss.SSSZ.`);
+      }
       return parseIso(value);
     case 'EPOCH_TIME_JAVA':
       return fromNumber(value, (n) => n);
@@ -47,7 +50,7 @@ export function parseDate(text: string, format = 'ISO8601'): Date {
 export function formatDate(date: Date, format = 'ISO8601'): string {
   switch (format) {
     case 'ISO8601':
-      return formatPattern(date, "yyyy-MM-dd'T'HH:mm:ss'Z'");
+      return formatPattern(date, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
     case 'EPOCH_TIME_JAVA':
       return String(date.getTime());
     case 'EPOCH_TIME_WIN32':
@@ -55,6 +58,16 @@ export function formatDate(date: Date, format = 'ISO8601'): string {
     default:
       return formatPattern(date, NAMED_FORMATS[format] ?? format);
   }
+}
+
+/** Java's ZonedDateTime.toString in UTC: seconds and milliseconds appear only when they are not zero. */
+export function javaIsoString(date: Date): string {
+  const seconds = date.getUTCSeconds();
+  const millis = date.getUTCMilliseconds();
+  let text = formatPattern(date, "yyyy-MM-dd'T'HH:mm");
+  if (seconds || millis) text += `:${pad(seconds, 2)}`;
+  if (millis) text += `.${pad(millis, 3)}`;
+  return `${text}Z`;
 }
 
 /** Accepts ISO 8601 strings, with or without time and zone, and the keyword "now". */
@@ -161,7 +174,7 @@ export function formatPattern(date: Date, pattern: string): string {
         case 'X':
           return 'Z';
         case 'z':
-          return 'UTC';
+          return 'GMT';
         default:
           throw new DateError(`The date pattern letter "${letter}" is not supported.`);
       }
@@ -252,7 +265,7 @@ interface DateParts {
 
 /**
  * Applies a dateMath expression such as "now+1w", "+3M/d" or "-5d/h".
- * Rounding ("/unit") goes down to the start of the unit, or up to its end when roundUp is true.
+ * Rounding ("/unit") goes down to the start of the unit, or up to the start of the next one when roundUp is true.
  */
 export function applyDateMath(base: Date | null, expression: string, roundUp: boolean, now: Date): Date {
   let rest = expression.trim();
@@ -288,11 +301,9 @@ function shift(date: Date, unit: string, amount: number): Date {
   const next = new Date(date);
   switch (unit) {
     case 'y':
-      next.setUTCFullYear(next.getUTCFullYear() + amount);
-      break;
+      return addMonths(date, amount * 12);
     case 'M':
-      next.setUTCMonth(next.getUTCMonth() + amount);
-      break;
+      return addMonths(date, amount);
     case 'w':
       next.setUTCDate(next.getUTCDate() + amount * 7);
       break;
@@ -309,6 +320,17 @@ function shift(date: Date, unit: string, amount: number): Date {
       next.setUTCSeconds(next.getUTCSeconds() + amount);
       break;
   }
+  return next;
+}
+
+/** Like Java's plusMonths: Jan 31 + 1 month is the last day of February, not early March. */
+function addMonths(date: Date, amount: number): Date {
+  const next = new Date(date);
+  const day = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + amount);
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, lastDay));
   return next;
 }
 
@@ -352,5 +374,5 @@ function round(date: Date, unit: string, up: boolean): Date {
       start = new Date(Date.UTC(y, mo, d, h, mi, s));
       next = new Date(Date.UTC(y, mo, d, h, mi, s + 1));
   }
-  return up ? new Date(next.getTime() - 1) : start;
+  return up ? next : start;
 }

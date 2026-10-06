@@ -1,6 +1,6 @@
 {
   "name": "sailpoint-optimusprime",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -36,6 +36,7 @@
     "rete-render-utils": "^2.0.3",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
+    "velocityjs": "^2.1.7",
     "web-worker": "^1.5.0",
     "zone.js": "^0.16.3"
   },

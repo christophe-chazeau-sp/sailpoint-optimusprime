@@ -1,0 +1,235 @@
+{
+  "ranAt": "2026-10-06T13:47:58.482Z",
+  "results": {
+    "concat with null": {
+      "value": "ab",
+      "errors": null
+    },
+    "join with null": {
+      "value": "a-null-b",
+      "errors": null
+    },
+    "velocity empty string in #if": {
+      "value": "T",
+      "errors": null
+    },
+    "velocity multi-line": {
+      "value": "A\nB\nC",
+      "errors": null
+    },
+    "velocity \"1\" == 1": {
+      "value": "T",
+      "errors": null
+    },
+    "velocity arithmetic": {
+      "value": "5",
+      "errors": null
+    },
+    "velocity interpolation": {
+      "value": "Hi Ada",
+      "errors": null
+    },
+    "velocity undefined ref": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: firstname (Transform ID: optimusprime-case-7)\nCause: Error rendering template: x$nope y"
+      ]
+    },
+    "velocity null result": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: identificationNumber (Transform ID: optimusprime-case-8)\nCause: Error rendering template: #set($x = null)$x"
+      ]
+    },
+    "velocity foreach": {
+      "value": "123",
+      "errors": null
+    },
+    "velocity string methods": {
+      "value": "BAN|b_n_n_,x|2",
+      "errors": null
+    },
+    "substring out of range": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: licenseStatus (Transform ID: optimusprime-case-11)\nCause: begin 1, end 10, length 3"
+      ]
+    },
+    "substring offsets": {
+      "value": "cd",
+      "errors": null
+    },
+    "split trailing empty": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: locationCode (Transform ID: optimusprime-case-13)\nCause: Split resulted in 2 items and you attempted to index at 3"
+      ]
+    },
+    "replace regex": {
+      "value": "a-b-c",
+      "errors": null
+    },
+    "replace groups": {
+      "value": "Smith John",
+      "errors": null
+    },
+    "replaceAll table": {
+      "value": "a b.c",
+      "errors": null
+    },
+    "dateFormat zone": {
+      "value": null,
+      "errors": null
+    },
+    "dateFormat epoch": {
+      "value": "2023-11-14T22:13:20.000Z",
+      "errors": null
+    },
+    "dateFormat pattern in": {
+      "value": "2026-03-29T00:00:00.000Z",
+      "errors": null
+    },
+    "dateMath month end": {
+      "value": "2026-02-28T00:00Z",
+      "errors": null
+    },
+    "dateMath round": {
+      "value": "2026-02-02T00:00Z",
+      "errors": null
+    },
+    "dateCompare now": {
+      "value": "yes",
+      "errors": null
+    },
+    "conditional": {
+      "value": "yes",
+      "errors": null
+    },
+    "e164phone FR": {
+      "value": "+33612345678",
+      "errors": null
+    },
+    "iso3166": {
+      "value": "FR",
+      "errors": null
+    },
+    "normalizeNames": {
+      "value": "Jean-Pierre O'Neil McDonald III",
+      "errors": null
+    },
+    "decomposeDiacriticalMarks": {
+      "value": "Elodie Nunez",
+      "errors": null
+    },
+    "leftPad": {
+      "value": "007",
+      "errors": null
+    },
+    "lookup no match": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: ibmiusername (Transform ID: optimusprime-case-29)\nCause: Lookup table has no entry for input: XX and no default is specified"
+      ]
+    },
+    "firstValid all null": {
+      "value": null,
+      "errors": null
+    },
+    "base64Encode accent": {
+      "value": "w6k=",
+      "errors": null
+    },
+    "lower of null": {
+      "value": null,
+      "errors": null
+    },
+    "replace forceNull, matching": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: country (Transform ID: optimusprime-case-33)\nCause: Error rendering template: #set($forceNull = null)$forceNull"
+      ]
+    },
+    "replace forceNull, not matching": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: department (Transform ID: optimusprime-case-34)\nCause: Error rendering template: #set($forceNull = null)$forceNull"
+      ]
+    },
+    "velocity quiet null": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: displayName (Transform ID: optimusprime-case-35)\nCause: Error rendering template: a$!x b"
+      ]
+    },
+    "velocity null variable": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: email (Transform ID: optimusprime-case-36)\nCause: Error rendering template: a$x b"
+      ]
+    },
+    "dateFormat zone letter X": {
+      "value": null,
+      "errors": null
+    },
+    "dateFormat plain pattern out": {
+      "value": null,
+      "errors": null
+    },
+    "dateMath round down": {
+      "value": "2026-01-31T00:00Z",
+      "errors": null
+    },
+    "dateMath round up on boundary": {
+      "value": "2026-02-01T00:00Z",
+      "errors": null
+    },
+    "split regex delimiter": {
+      "value": "c",
+      "errors": null
+    },
+    "dateFormat ISO millis in": {
+      "value": "2026-03-29 01:30",
+      "errors": null
+    },
+    "dateFormat ISO date only in": {
+      "value": null,
+      "errors": null
+    },
+    "dateFormat ISO offset in": {
+      "value": null,
+      "errors": null
+    },
+    "dateFormat no formats": {
+      "value": null,
+      "errors": null
+    },
+    "dateFormat bad input": {
+      "value": null,
+      "errors": null
+    },
+    "dateFormat pattern to pattern": {
+      "value": "29.03.2026",
+      "errors": null
+    },
+    "dateFormat pattern to zone z": {
+      "value": "2026-03-29 00:00 GMT",
+      "errors": null
+    },
+    "velocity quiet undefined": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: postalCode (Transform ID: optimusprime-case-49)\nCause: Error rendering template: a$!nope b"
+      ]
+    },
+    "velocity quiet after set null": {
+      "value": null,
+      "errors": [
+        "There was an exception while calculating the value for this attribute. Error during transformation for attribute: preferredLanguage (Transform ID: optimusprime-case-50)\nCause: Error rendering template: #set($x = null)a$!x b"
+      ]
+    },
+    "velocity quiet empty string": {
+      "value": "a b",
+      "errors": null
+    }
+  }
+}

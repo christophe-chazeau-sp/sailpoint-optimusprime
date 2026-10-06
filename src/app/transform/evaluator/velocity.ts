@@ -1,7 +1,11 @@
+import { Compile, Helper, render } from 'velocityjs';
+
+type CompileConfig = NonNullable<Parameters<typeof render>[3]>;
+
 /**
- * A small Velocity subset, enough for typical static and conditional transforms:
- * $var, ${var}, $!var, simple string methods, #set, and #if / #elseif / #else / #end
- * with ==, !=, <, >, <=, >=, &&, ||, ! (and the and / or / not keywords).
+ * Velocity templates rendered by velocityjs, adjusted to behave like Apache Velocity as configured
+ * in Identity Security Cloud: strings answer Java String methods, only null and false are false in
+ * conditions, and printing an undefined or null reference fails, even when it is written $!x.
  */
 
 export type TemplateValue = string | number | boolean | null;
@@ -9,429 +13,179 @@ export type TemplateVars = Map<string, TemplateValue>;
 
 export class TemplateError extends Error {}
 
-type Node =
-  | { kind: 'text'; text: string }
-  | { kind: 'ref'; ref: Reference; raw: string }
-  | { kind: 'set'; name: string; expression: string }
-  | { kind: 'if'; branches: { condition: string; body: Node[] }[]; otherwise: Node[] };
-
-interface Reference {
-  name: string;
-  quiet: boolean;
-  methods: { name: string; args: string }[];
-}
-
 export function renderTemplate(template: string, vars: TemplateVars): TemplateValue {
-  const scope = new Map(vars);
-  const parser = new TemplateParser(template);
-  const nodes = parser.parseBlock([]).nodes;
-  return renderNodes(nodes, scope);
-}
-
-/** Names referenced by a template, so callers know which variables it needs. */
-export function templateNames(template: string): string[] {
-  const names = new Set<string>();
-  for (const match of template.matchAll(/\$!?\{?([A-Za-z_][\w-]*)/g)) {
-    names.add(match[1]);
+  const context: Record<string, unknown> = {};
+  for (const [name, value] of vars) {
+    context[name] = value;
   }
-  return [...names];
-}
-
-function renderNodes(nodes: Node[], scope: TemplateVars): TemplateValue {
-  let output = '';
-  let wrote = false;
-  let explicitNull = false;
-  const append = (value: TemplateValue) => {
-    if (value === null) {
-      explicitNull = true;
-      return;
+  const config: CompileConfig = { customMethodHandlers: [JAVA_STRING_METHODS] };
+  try {
+    return render(template, context, {}, config);
+  } catch (error) {
+    if (error instanceof TemplateError) {
+      throw error;
     }
-    if (value !== '') {
-      wrote = true;
-    }
-    output += String(value);
-  };
-  for (const node of nodes) {
-    switch (node.kind) {
-      case 'text':
-        if (node.text) {
-          wrote = true;
-        }
-        output += node.text;
-        break;
-      case 'ref': {
-        const value = resolveReference(node.ref, scope);
-        if (value === null || value === undefined) {
-          // A variable set to null, as in #set($forceNull = null)$forceNull, yields null.
-          if (!node.ref.quiet && scope.get(node.ref.name) === null) {
-            explicitNull = true;
-          } else if (!node.ref.quiet) {
-            wrote = true;
-            output += node.raw;
-          }
-          break;
-        }
-        append(value);
-        break;
-      }
-      case 'set':
-        scope.set(node.name, evaluateExpression(node.expression, scope));
-        break;
-      case 'if': {
-        const branch = node.branches.find((item) =>
-          truthy(evaluateExpression(item.condition, scope)),
-        );
-        append(renderNodes(branch ? branch.body : node.otherwise, scope));
-        break;
-      }
-    }
+    const message = error instanceof Error ? error.message.split('\n')[0] : String(error);
+    throw new TemplateError(`The template cannot be rendered: ${message}`);
   }
-  return !wrote && explicitNull ? null : output;
 }
 
-function resolveReference(ref: Reference, scope: TemplateVars): TemplateValue | undefined {
-  let value: TemplateValue | undefined = scope.get(ref.name);
-  for (const method of ref.methods) {
-    if (value === null || value === undefined) {
-      return value;
-    }
-    value = callMethod(String(value), method.name, method.args, scope);
-  }
-  return value;
+function javaTruthy(value: unknown): boolean {
+  return value !== null && value !== undefined && value !== false;
 }
 
-function callMethod(text: string, name: string, args: string, scope: TemplateVars): TemplateValue {
-  const values = splitArgs(args).map((arg) => evaluateExpression(arg, scope));
-  switch (name) {
-    case 'toUpperCase':
-      return text.toUpperCase();
-    case 'toLowerCase':
-      return text.toLowerCase();
-    case 'trim':
-      return text.trim();
-    case 'length':
-      return text.length;
-    case 'substring':
-      return text.substring(Number(values[0]), values[1] === undefined ? undefined : Number(values[1]));
-    case 'replace':
-      return text.split(String(values[0])).join(String(values[1]));
-    case 'contains':
-      return text.includes(String(values[0]));
-    case 'startsWith':
-      return text.startsWith(String(values[0]));
-    case 'endsWith':
-      return text.endsWith(String(values[0]));
-    case 'equals':
-      return text === String(values[0]);
-    case 'equalsIgnoreCase':
-      return text.toLowerCase() === String(values[0]).toLowerCase();
-    case 'isEmpty':
-      return text.length === 0;
+interface Ast {
+  type: string;
+  condition?: Ast;
+  operator?: string;
+  expression?: Ast[];
+  leader?: string;
+}
+
+interface CompileInternals {
+  silence?: boolean;
+  contextId: string;
+  getExpression(ast: Ast): unknown;
+  getReferences(ast: Ast, isVal?: boolean): unknown;
+  renderAstList(asts: Ast[], contextId: string): string;
+}
+
+const compile = Compile.prototype as unknown as CompileInternals;
+const baseExpression = compile.getExpression;
+const baseReferences = compile.getReferences;
+
+compile.getExpression = function (this: CompileInternals, ast: Ast) {
+  const [left, right] = ast.expression ?? [];
+  switch (ast.type === 'math' ? ast.operator : undefined) {
+    case '&&':
+      return javaTruthy(this.getExpression(left)) && javaTruthy(this.getExpression(right));
+    case '||':
+      return javaTruthy(this.getExpression(left)) || javaTruthy(this.getExpression(right));
+    case 'not':
+      return !javaTruthy(this.getExpression(left));
     default:
-      throw new TemplateError(`The template method ${name}() is not supported locally.`);
+      return baseExpression.call(this, ast);
   }
-}
+};
 
-function splitArgs(args: string): string[] {
-  const result: string[] = [];
-  let depth = 0;
-  let quote = '';
-  let current = '';
-  for (const char of args) {
-    if (quote) {
-      current += char;
-      if (char === quote) quote = '';
-    } else if (char === '"' || char === "'") {
-      quote = char;
-      current += char;
-    } else if (char === '(') {
-      depth++;
-      current += char;
-    } else if (char === ')') {
-      depth--;
-      current += char;
-    } else if (char === ',' && depth === 0) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
+compile.getReferences = function (this: CompileInternals, ast: Ast, isVal?: boolean) {
+  if (!isVal) {
+    return baseReferences.call(this, ast, isVal);
   }
-  if (current.trim()) {
-    result.push(current.trim());
-  }
-  return result;
-}
-
-function truthy(value: TemplateValue | undefined): boolean {
-  return value !== null && value !== undefined && value !== false && value !== '';
-}
-
-class TemplateParser {
-  private index = 0;
-
-  constructor(private readonly source: string) {}
-
-  parseBlock(stops: string[]): { nodes: Node[]; stop: string | null; condition: string } {
-    const nodes: Node[] = [];
-    let text = '';
-    const flush = () => {
-      if (text) {
-        nodes.push({ kind: 'text', text });
-        text = '';
-      }
-    };
-
-    while (this.index < this.source.length) {
-      const rest = this.source.slice(this.index);
-
-      if (rest.startsWith('##')) {
-        const end = this.source.indexOf('\n', this.index);
-        this.index = end === -1 ? this.source.length : end + 1;
-        continue;
-      }
-
-      const directive = /^#\{?(if|elseif|else|end|set)\}?/.exec(rest);
-      if (directive) {
-        const name = directive[1];
-        if (stops.includes(name)) {
-          flush();
-          this.index += directive[0].length;
-          const condition = name === 'elseif' ? this.readParens() : '';
-          return { nodes, stop: name, condition };
-        }
-        if (name === 'if') {
-          flush();
-          this.index += directive[0].length;
-          nodes.push(this.parseIf(this.readParens()));
-          continue;
-        }
-        if (name === 'set') {
-          flush();
-          this.index += directive[0].length;
-          const body = this.readParens();
-          const assignment = /^\s*\$!?\{?([A-Za-z_][\w-]*)\}?\s*=\s*([\s\S]+)$/.exec(body);
-          if (!assignment) {
-            throw new TemplateError(`Cannot read #set(${body}).`);
-          }
-          nodes.push({ kind: 'set', name: assignment[1], expression: assignment[2] });
-          continue;
-        }
-        throw new TemplateError(`Unexpected #${name} in the template.`);
-      }
-
-      const reference = this.readReference(rest);
-      if (reference) {
-        flush();
-        nodes.push(reference.node);
-        this.index += reference.length;
-        continue;
-      }
-
-      text += this.source[this.index];
-      this.index++;
-    }
-
-    if (stops.length > 0) {
-      throw new TemplateError('The template has an #if without a matching #end.');
-    }
-    flush();
-    return { nodes, stop: null, condition: '' };
-  }
-
-  private parseIf(firstCondition: string): Node {
-    const branches: { condition: string; body: Node[] }[] = [];
-    let condition = firstCondition;
-    for (;;) {
-      const block = this.parseBlock(['elseif', 'else', 'end']);
-      branches.push({ condition, body: block.nodes });
-      if (block.stop === 'elseif') {
-        condition = block.condition;
-        continue;
-      }
-      if (block.stop === 'else') {
-        const otherwise = this.parseBlock(['end']);
-        return { kind: 'if', branches, otherwise: otherwise.nodes };
-      }
-      return { kind: 'if', branches, otherwise: [] };
-    }
-  }
-
-  private readParens(): string {
-    while (this.source[this.index] === ' ') {
-      this.index++;
-    }
-    if (this.source[this.index] !== '(') {
-      throw new TemplateError('Expected "(" after a template directive.');
-    }
-    let depth = 0;
-    let quote = '';
-    const start = this.index + 1;
-    for (; this.index < this.source.length; this.index++) {
-      const char = this.source[this.index];
-      if (quote) {
-        if (char === quote) quote = '';
-      } else if (char === '"' || char === "'") {
-        quote = char;
-      } else if (char === '(') {
-        depth++;
-      } else if (char === ')') {
-        depth--;
-        if (depth === 0) {
-          const body = this.source.slice(start, this.index);
-          this.index++;
-          return body;
-        }
-      }
-    }
-    throw new TemplateError('A template directive is missing its closing ")".');
-  }
-
-  private readReference(rest: string): { node: Node; length: number } | null {
-    const match = /^\$(!)?(\{)?([A-Za-z_][\w-]*)((?:\.[A-Za-z_]\w*\([^()]*\))*)(\})?/.exec(rest);
-    if (!match || (match[2] && !match[5])) {
-      return null;
-    }
-    const methods = [...match[4].matchAll(/\.([A-Za-z_]\w*)\(([^()]*)\)/g)].map((item) => ({
-      name: item[1],
-      args: item[2],
-    }));
-    return {
-      node: {
-        kind: 'ref',
-        raw: match[0],
-        ref: { name: match[3], quiet: !!match[1], methods },
-      },
-      length: match[0].length,
-    };
-  }
-}
-
-/** Expressions inside #if and #set: a tiny precedence-climbing parser. */
-function evaluateExpression(source: string, scope: TemplateVars): TemplateValue {
-  const tokens = tokenizeExpression(source);
-  let position = 0;
-
-  const peek = () => tokens[position];
-  const next = () => tokens[position++];
-
-  const primary = (): TemplateValue => {
-    const token = next();
-    if (token === undefined) {
-      throw new TemplateError(`Incomplete expression "${source}".`);
-    }
-    if (token === '(') {
-      const value = or();
-      next();
-      return value;
-    }
-    if (token === '!' || token === 'not') {
-      return !truthy(primary());
-    }
-    if (token.startsWith('"') || token.startsWith("'")) {
-      return token.slice(1, -1);
-    }
-    if (/^-?\d+(\.\d+)?$/.test(token)) {
-      return Number(token);
-    }
-    if (token === 'true' || token === 'false') {
-      return token === 'true';
-    }
-    if (token === 'null') {
-      return null;
-    }
-    if (token.startsWith('$')) {
-      const match = /^\$!?\{?([A-Za-z_][\w-]*)\}?((?:\.[A-Za-z_]\w*\([^()]*\))*)$/.exec(token);
-      if (!match) {
-        throw new TemplateError(`Cannot read "${token}".`);
-      }
-      const methods = [...match[2].matchAll(/\.([A-Za-z_]\w*)\(([^()]*)\)/g)].map((item) => ({
-        name: item[1],
-        args: item[2],
-      }));
-      return resolveReference({ name: match[1], quiet: true, methods }, scope) ?? null;
-    }
-    throw new TemplateError(`Unexpected "${token}" in "${source}".`);
-  };
-
-  const comparison = (): TemplateValue => {
-    const left = primary();
-    const operator = peek();
-    if (operator && ['==', '!=', '<', '>', '<=', '>=', 'eq', 'ne', 'lt', 'gt', 'le', 'ge'].includes(operator)) {
-      next();
-      const right = primary();
-      return compare(left, operator, right);
-    }
-    return left;
-  };
-
-  const and = (): TemplateValue => {
-    let value = comparison();
-    while (peek() === '&&' || peek() === 'and') {
-      next();
-      const right = comparison();
-      value = truthy(value) && truthy(right);
-    }
-    return value;
-  };
-
-  function or(): TemplateValue {
-    let value = and();
-    while (peek() === '||' || peek() === 'or') {
-      next();
-      const right = and();
-      value = truthy(value) || truthy(right);
-    }
+  const value = baseReferences.call(this, ast, false);
+  if (value !== null && value !== undefined) {
     return value;
   }
+  throw new TemplateError(`Error rendering template: ${Helper.getRefText(ast as never)} has no value.`);
+};
 
-  const result = or();
-  if (position < tokens.length) {
-    throw new TemplateError(`Unexpected "${tokens[position]}" in "${source}".`);
+(compile as unknown as { getBlockIf(block: Ast[]): string }).getBlockIf = function (
+  this: CompileInternals,
+  block: Ast[],
+) {
+  let received = false;
+  const asts: Ast[] = [];
+  block.some((ast) => {
+    const hasCondition = ast.type === 'elseif' || ast.type === 'if';
+    if (!(hasCondition || ast.type === 'else')) {
+      if (received) asts.push(ast);
+      return false;
+    }
+    if (received) return true;
+    received = hasCondition ? javaTruthy(this.getExpression(ast.condition as Ast)) : true;
+    return false;
+  });
+  return this.renderAstList(asts, this.contextId);
+};
+
+type JavaMethod = (text: string, ...args: unknown[]) => unknown;
+
+const STRING_METHODS: Record<string, JavaMethod> = {
+  length: (text) => text.length,
+  isEmpty: (text) => text.length === 0,
+  isBlank: (text) => text.trim().length === 0,
+  charAt: (text, index) => text.charAt(checkIndex(text, Number(index), text.length - 1)),
+  substring: (text, begin, end) => {
+    const from = Number(begin);
+    const to = end === undefined ? text.length : Number(end);
+    if (from < 0 || to > text.length || from > to) {
+      throw new TemplateError(`substring(${from}, ${to}) is out of range for "${text}".`);
+    }
+    return text.substring(from, to);
+  },
+  indexOf: (text, search, from) => text.indexOf(String(search), from === undefined ? 0 : Number(from)),
+  lastIndexOf: (text, search, from) =>
+    from === undefined ? text.lastIndexOf(String(search)) : text.lastIndexOf(String(search), Number(from)),
+  contains: (text, search) => text.includes(String(search)),
+  startsWith: (text, prefix, offset) => text.startsWith(String(prefix), offset === undefined ? 0 : Number(offset)),
+  endsWith: (text, suffix) => text.endsWith(String(suffix)),
+  equals: (text, other) => typeof other === 'string' && text === other,
+  equalsIgnoreCase: (text, other) => typeof other === 'string' && text.toLowerCase() === other.toLowerCase(),
+  compareTo: (text, other) => compareStrings(text, String(other)),
+  compareToIgnoreCase: (text, other) => compareStrings(text.toLowerCase(), String(other).toLowerCase()),
+  concat: (text, other) => text + String(other),
+  replace: (text, target, replacement) => text.split(String(target)).join(String(replacement)),
+  replaceAll: (text, pattern, replacement) => text.replace(javaRegex(pattern, 'g'), javaReplacement(replacement)),
+  replaceFirst: (text, pattern, replacement) => text.replace(javaRegex(pattern, ''), javaReplacement(replacement)),
+  matches: (text, pattern) => javaRegex(`^(?:${String(pattern)})$`, '').test(text),
+  split: (text, pattern, limit) => javaSplit(text, String(pattern), limit === undefined ? 0 : Number(limit)),
+  toLowerCase: (text) => text.toLowerCase(),
+  toUpperCase: (text) => text.toUpperCase(),
+  trim: (text) => text.trim(),
+  strip: (text) => text.trim(),
+  toString: (text: string) => text,
+};
+
+type MethodHandler = NonNullable<CompileConfig['customMethodHandlers']>[number];
+
+const JAVA_STRING_METHODS: MethodHandler = {
+  uid: 'java-string',
+  match: ({ context, property }) => typeof context === 'string' && Object.hasOwn(STRING_METHODS, property),
+  resolve: ({ context, property, params }) => STRING_METHODS[property](context as string, ...params),
+};
+
+function checkIndex(text: string, index: number, max: number): number {
+  if (!Number.isInteger(index) || index < 0 || index > max) {
+    throw new TemplateError(`Index ${index} is out of range for "${text}".`);
   }
-  return result;
+  return index;
 }
 
-function compare(left: TemplateValue, operator: string, right: TemplateValue): boolean {
-  const bothNumbers =
-    left !== null && right !== null && left !== '' && right !== '' &&
-    !Number.isNaN(Number(left)) && !Number.isNaN(Number(right));
-  const a = bothNumbers ? Number(left) : left === null ? null : String(left);
-  const b = bothNumbers ? Number(right) : right === null ? null : String(right);
-  switch (operator) {
-    case '==':
-    case 'eq':
-      return a === b;
-    case '!=':
-    case 'ne':
-      return a !== b;
-    case '<':
-    case 'lt':
-      return a !== null && b !== null && a < b;
-    case '>':
-    case 'gt':
-      return a !== null && b !== null && a > b;
-    case '<=':
-    case 'le':
-      return a !== null && b !== null && a <= b;
-    default:
-      return a !== null && b !== null && a >= b;
+function compareStrings(a: string, b: string): number {
+  return a === b ? 0 : a < b ? -1 : 1;
+}
+
+function javaRegex(pattern: unknown, flags: string): RegExp {
+  try {
+    return new RegExp(String(pattern), flags);
+  } catch {
+    throw new TemplateError(`"${String(pattern)}" is not a valid regular expression.`);
   }
 }
 
-function tokenizeExpression(source: string): string[] {
-  const pattern =
-    /\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\$!?\{?[A-Za-z_][\w-]*\}?(?:\.[A-Za-z_]\w*\([^()]*\))*|==|!=|<=|>=|&&|\|\||[()!<>]|-?\d+(?:\.\d+)?|[A-Za-z_]\w*)/y;
-  const tokens: string[] = [];
-  let end = 0;
-  let match: RegExpExecArray | null;
-  pattern.lastIndex = 0;
-  while (end < source.length && (match = pattern.exec(source)) !== null) {
-    tokens.push(match[1]);
-    end = pattern.lastIndex;
+/** Java writes a literal dollar as \$ in replacements; JavaScript uses $$. */
+function javaReplacement(replacement: unknown): string {
+  return String(replacement).replace(/\\\$/g, '$$$$');
+}
+
+/** Java's String.split: a regex delimiter, and trailing empty strings dropped unless a limit is given. */
+export function javaSplit(text: string, pattern: string, limit: number): string[] {
+  const parts = text.split(javaRegex(pattern, ''));
+  if (limit > 0 && parts.length > limit) {
+    const kept = parts.slice(0, limit - 1);
+    const regex = javaRegex(pattern, 'g');
+    let consumed = 0;
+    for (let i = 0; i < limit - 1; i++) {
+      const match = regex.exec(text);
+      if (!match) break;
+      consumed = match.index + match[0].length;
+    }
+    return [...kept, text.slice(consumed)];
   }
-  if (source.slice(end).trim() !== '') {
-    throw new TemplateError(`Cannot read the expression "${source}".`);
+  if (limit === 0) {
+    while (parts.length > 1 && parts[parts.length - 1] === '') {
+      parts.pop();
+    }
   }
-  return tokens;
+  return parts;
 }

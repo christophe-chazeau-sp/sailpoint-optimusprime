@@ -1,8 +1,8 @@
 import { lookupOperation } from '../catalog/operations';
 import { JsonPath } from '../model/transform-graph';
 import { pathKey } from '../source-range';
-import { applyDateMath, DateError, formatDate, parseDate, parseIso } from './dates';
-import { renderTemplate, TemplateError, TemplateValue, TemplateVars } from './velocity';
+import { applyDateMath, DateError, formatDate, javaIsoString, parseDate, parseIso } from './dates';
+import { javaSplit, renderTemplate, TemplateError, TemplateValue, TemplateVars } from './velocity';
 
 export type Value = string | number | boolean | null;
 
@@ -270,7 +270,6 @@ class Evaluator {
         const separator = at.has('separator') ? String(at.value('separator') ?? '') : ',';
         return at
           .list('values')
-          .filter((value) => value !== null)
           .map(String)
           .join(separator);
       }
@@ -325,12 +324,17 @@ class Evaluator {
       }
 
       case 'dateFormat':
-        return mapText(at.input(), (text) =>
-          formatDate(
-            parseDate(text, String(at.value('inputFormat') ?? 'ISO8601')),
-            String(at.value('outputFormat') ?? 'ISO8601'),
-          ),
-        );
+        return mapText(at.input(), (text) => {
+          let date: Date;
+          try {
+            date = parseDate(text, String(at.value('inputFormat') ?? 'ISO8601'));
+          } catch (error) {
+            // The tenant returns null, without an error, for an input that does not match inputFormat.
+            if (error instanceof DateError) return null;
+            throw error;
+          }
+          return formatDate(date, String(at.value('outputFormat') ?? 'ISO8601'));
+        });
       case 'dateMath': {
         const expression = String(at.value('expression') ?? '');
         const roundUp = at.value('roundUp') === true || at.value('roundUp') === 'true';
@@ -338,7 +342,7 @@ class Evaluator {
         const input = usesNow ? null : at.input();
         if (!usesNow && input === null) return null;
         const base = input === null ? null : parseIso(String(input), this.now);
-        return applyDateMath(base, expression, roundUp, this.now).toISOString();
+        return javaIsoString(applyDateMath(base, expression, roundUp, this.now));
       }
       case 'dateCompare':
         return this.dateCompare(at);
@@ -663,14 +667,19 @@ function substring(text: string, at: AttributeReader): string {
 function split(text: string, at: AttributeReader): Value {
   const delimiter = String(at.value('delimiter') ?? '');
   const index = at.number('index', 0);
-  const parts = text.split(delimiter);
+  let parts: string[];
+  try {
+    parts = javaSplit(text, delimiter, 0);
+  } catch {
+    throw new StepError(`"${delimiter}" is not a valid split delimiter.`);
+  }
   if (index >= 0 && index < parts.length) {
     return parts[index];
   }
-  if (at.value('throws') === true || at.value('throws') === 'true') {
-    throw new StepError(`There is no part ${index}; the value splits into ${parts.length}.`);
+  if (at.value('throws') === false || at.value('throws') === 'false') {
+    return null;
   }
-  return null;
+  throw new StepError(`Split resulted in ${parts.length} items and you attempted to index at ${index}.`);
 }
 
 function encodeBase64(text: string): string {
