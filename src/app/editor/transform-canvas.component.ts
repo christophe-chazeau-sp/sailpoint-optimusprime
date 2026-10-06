@@ -552,10 +552,11 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       await editor.addConnection(connection);
     }
 
+    // Input lines and results change box heights, which move the anchors; size first, then lay out.
+    this.applyResults();
     await this.layoutNodes();
 
     await AreaExtensions.zoomAt(area, editor.getNodes(), { scale: FIT_SCALE });
-    this.applyResults();
     this.syncBackground(area);
     await this.syncSelection();
   }
