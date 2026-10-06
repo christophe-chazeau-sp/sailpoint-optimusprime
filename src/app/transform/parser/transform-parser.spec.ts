@@ -149,6 +149,21 @@ describe('parseTransform', () => {
     ]);
   });
 
+  it('flags the steps that are calculated with Velocity', () => {
+    const flagged = (document: unknown) => {
+      const result = parseTransform(document);
+      return result.ok ? result.graph.nodes.filter((node) => node.usesVelocity).map((node) => node.type) : [];
+    };
+    expect(flagged(TRANSFORM_EXAMPLES.find((item) => item.id === 'static')?.document)).toEqual(['static']);
+    expect(flagged({ type: 'replace', attributes: { input: 'a', regex: 'a', replacement: '#set($x = 1)$x' } })).toEqual([
+      'replace',
+    ]);
+    expect(
+      flagged({ type: 'concat', attributes: { values: ['$first', { type: 'lower', attributes: { input: 'A' } }] } }),
+    ).toEqual(['concat']);
+    expect(flagged({ type: 'lower', attributes: { input: 'Price: 5$' } })).toEqual([]);
+  });
+
   it('records the JSON path of each node', () => {
     const example = TRANSFORM_EXAMPLES.find((item) => item.id === 'concat');
     const result = parseTransform(example?.document);

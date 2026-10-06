@@ -115,6 +115,7 @@ class GraphBuilder {
       attributes: scalars,
       unknownType: !operation,
       ...velocityField(scalars),
+      ...(usesVelocity(type, attributes) ? { usesVelocity: true } : {}),
     });
 
     for (const child of children) {
@@ -305,6 +306,19 @@ function buildSummary(scalars: ScalarAttribute[]): string {
     .slice(0, 3)
     .map((item) => `${item.key}: ${truncate(item.value, 36)}`)
     .join(' · ');
+}
+
+const VELOCITY_TYPES = new Set(['static', 'conditional', 'usernameGenerator']);
+
+/** Velocity-rendered types, or a step with a $reference or #set / #if in one of its own text values. */
+function usesVelocity(type: string, attributes: Record<string, unknown>): boolean {
+  if (VELOCITY_TYPES.has(type)) {
+    return true;
+  }
+  const texts = Object.values(attributes).flatMap((value) => (Array.isArray(value) ? value : [value]));
+  return texts.some(
+    (text) => typeof text === 'string' && (/\$!?\{?[A-Za-z_]/.test(text) || /#\{?(?:set|if|foreach)\b/.test(text)),
+  );
 }
 
 function velocityField(scalars: ScalarAttribute[]): { velocityTemplate?: string } {

@@ -25,6 +25,10 @@ export class TransformNodeComponent implements OnChanges {
   @Input() emit!: (payload: unknown) => void;
   @Input() rendered!: () => void;
 
+  readonly velocityWarning =
+    'This step contains a Velocity expression. It is calculated here with a JavaScript Velocity engine, ' +
+    'which may behave differently from the tenant. Test it in the tenant before sending it to production.';
+
   seed = 0;
 
   constructor(private readonly cdr: ChangeDetectorRef) {

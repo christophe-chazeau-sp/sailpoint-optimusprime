@@ -20,6 +20,8 @@ export interface TransformNodeModel {
   attributes: ScalarAttribute[];
   unknownType: boolean;
   velocityTemplate?: string;
+  /** The step is calculated with Velocity, whose local rendering may differ from the tenant's. */
+  usesVelocity?: boolean;
 }
 
 export interface TransformEdgeModel {

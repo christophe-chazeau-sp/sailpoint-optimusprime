@@ -26,6 +26,16 @@
     }
   </div>
   <span class="menu" aria-hidden="true">•••</span>
+  @if (data.model.usesVelocity && !data.capsule) {
+    <span
+      class="velocity"
+      data-testid="velocity-warning"
+      role="img"
+      [attr.aria-label]="velocityWarning"
+      [title]="velocityWarning"
+      >V</span
+    >
+  }
 
   @if (data.result; as result) {
     <span

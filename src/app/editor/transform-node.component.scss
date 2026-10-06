@@ -243,6 +243,24 @@
   letter-spacing: 1px;
 }
 
+.velocity {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #fdb022;
+  border-radius: 50%;
+  background: #fef0c7;
+  color: #b54708;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+
 .result {
   position: absolute;
   top: calc(100% + 5px);
