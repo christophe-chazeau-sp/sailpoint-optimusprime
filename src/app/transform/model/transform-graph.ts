@@ -7,10 +7,24 @@ export interface ScalarAttribute {
 
 export type JsonPath = (string | number)[];
 
+/** An input of a block with nothing plugged in yet: empty, holding a plain value, or a list's next item. */
+export interface OpenSlot {
+  /** Input key on the canvas, such as `input`, `firstDate` or `values[+]`. */
+  key: string;
+  label: string;
+  /** Plain value currently in the slot. */
+  value?: string;
+}
+
 export interface TransformNodeModel {
   id: string;
-  /** Location in the source document; absent for nodes that have no JSON of their own. */
+  /** Location in its tree; absent for nodes that have no JSON of their own. */
   path?: JsonPath;
+  /** Which tree the node belongs to: the connected transform, or a floating block's id. */
+  tree?: string;
+  /** Top block of a tree that is not connected to the transform output. */
+  floating?: boolean;
+  slots?: OpenSlot[];
   kind: TransformNodeKind;
   type: string;
   label: string;
@@ -35,7 +49,8 @@ export interface TransformEdgeModel {
 }
 
 export interface TransformGraph {
-  rootId: string;
+  /** Null when no block is connected to the transform output. */
+  rootId: string | null;
   nodes: TransformNodeModel[];
   edges: TransformEdgeModel[];
 }

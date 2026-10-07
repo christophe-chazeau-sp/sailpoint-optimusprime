@@ -1,12 +1,15 @@
-import { lookupOperation } from '../catalog/operations';
+import { blockInfo, knownAttributes } from '../catalog/blocks';
+import { lookupOperation, usesImplicitInput } from '../catalog/operations';
 import {
   JsonPath,
+  OpenSlot,
   ParseResult,
   ScalarAttribute,
   TransformEdgeModel,
   TransformGraph,
   TransformNodeModel,
 } from '../model/transform-graph';
+import { ROOT_TREE, uidOf, Workspace } from '../workspace/workspace';
 
 const TEMPLATE_KEYS = ['value', 'expression', 'positiveCondition', 'negativeCondition'];
 
@@ -25,49 +28,78 @@ interface VariableBinding {
 const RESERVED_CONDITIONAL_KEYS = new Set(['expression', 'positiveCondition', 'negativeCondition']);
 const VARIABLE_PATTERN = /\$!?\{?([A-Za-z_][\w-]*)\}?/g;
 
-export function parseTransform(value: unknown): ParseResult {
+function validateRoot(value: unknown): string | null {
   if (Array.isArray(value)) {
-    return { ok: false, message: 'Expected a single transform object.' };
+    return 'Expected a single transform object.';
   }
   if (!isRecord(value)) {
-    return { ok: false, message: 'A transform must be a JSON object.' };
+    return 'A transform must be a JSON object.';
   }
   if (typeof value['type'] !== 'string') {
-    return { ok: false, message: 'The transform is missing a string type.' };
+    return 'The transform is missing a string type.';
   }
   if (
     Object.prototype.hasOwnProperty.call(value, 'attributes') &&
     value['attributes'] !== undefined &&
     !isRecord(value['attributes'])
   ) {
-    return { ok: false, message: 'The attributes property must be an object.' };
+    return 'The attributes property must be an object.';
   }
+  return null;
+}
 
+export function parseTransform(value: unknown): ParseResult {
+  const problem = validateRoot(value);
+  if (problem) {
+    return { ok: false, message: problem };
+  }
   const builder = new GraphBuilder();
-  const rootId = builder.walk(value, true);
+  const rootId = builder.walk(value as Record<string, unknown>, true);
+  return { ok: true, graph: { rootId, nodes: builder.nodes, edges: builder.edges } };
+}
+
+/** The connected transform plus every floating block, in one graph. */
+export function parseWorkspace(workspace: Workspace): ParseResult {
+  const builder = new GraphBuilder();
+  let rootId: string | null = null;
+  if (workspace.document) {
+    const problem = validateRoot(workspace.document);
+    if (problem) {
+      return { ok: false, message: problem };
+    }
+    rootId = builder.walk(workspace.document, true, [], [], ROOT_TREE);
+  }
+  for (const block of workspace.floating) {
+    const id = builder.walk(block.value, false, [], [], block.id);
+    const node = builder.nodes.find((item) => item.id === id);
+    if (node) {
+      node.floating = true;
+    }
+  }
   return { ok: true, graph: { rootId, nodes: builder.nodes, edges: builder.edges } };
 }
 
 class GraphBuilder {
   readonly nodes: TransformNodeModel[] = [];
   readonly edges: TransformEdgeModel[] = [];
-  private readonly ids = new WeakMap<object, string>();
-  private nodeCount = 0;
-  private edgeCount = 0;
+  private readonly added = new Set<string>();
+  private tree = ROOT_TREE;
 
   walk(
     value: Record<string, unknown>,
     isRoot: boolean,
     path: JsonPath = [],
     scope: VariableBinding[] = [],
+    tree?: string,
   ): string {
-    const existing = this.ids.get(value);
-    if (existing) {
-      return existing;
+    if (tree) {
+      this.tree = tree;
     }
-
-    const id = this.nextNodeId();
-    this.ids.set(value, id);
+    const id = uidOf(value);
+    if (this.added.has(id)) {
+      return id;
+    }
+    this.added.add(id);
 
     const type = value['type'] as string;
     const attributes = isRecord(value['attributes']) ? value['attributes'] : {};
@@ -80,6 +112,7 @@ class GraphBuilder {
       const inBranch =
         type === 'conditional' && (key === 'positiveCondition' || key === 'negativeCondition');
       this.absorb(
+        id,
         type,
         key,
         attribute,
@@ -93,19 +126,21 @@ class GraphBuilder {
     this.appendRootMetadata(value, isRoot, scalars);
 
     const operation = lookupOperation(type);
-    const hasExplicitInput = Object.prototype.hasOwnProperty.call(attributes, 'input');
-    if (operation?.consumesInput && !hasExplicitInput) {
+    if (usesImplicitInput(type, attributes)) {
       children.unshift({
         key: 'implicit',
         label: 'Implicit input',
-        childId: this.addImplicit(),
+        childId: this.addImplicit(id),
       });
     }
 
     const name = typeof value['name'] === 'string' ? value['name'] : undefined;
+    const slots = openSlots(type, attributes, children);
     this.nodes.push({
       id,
       path,
+      tree: this.tree,
+      ...(slots.length ? { slots } : {}),
       kind: 'operation',
       type,
       label: operation?.label ?? humanize(type),
@@ -120,7 +155,7 @@ class GraphBuilder {
 
     for (const child of children) {
       this.edges.push({
-        id: this.nextEdgeId(),
+        id: `${child.childId}>${id}:${child.key}`,
         sourceId: child.childId,
         targetId: id,
         inputKey: child.key,
@@ -133,6 +168,7 @@ class GraphBuilder {
   }
 
   private absorb(
+    ownerId: string,
     parentType: string,
     key: string,
     attribute: unknown,
@@ -146,7 +182,7 @@ class GraphBuilder {
       (key === 'positiveCondition' || key === 'negativeCondition') &&
       !isTransform(attribute)
     ) {
-      const childId = this.addLiteral(attribute, path);
+      const childId = this.addLiteral(attribute, path, `${ownerId}:${key}`);
       children.push({ key, label: key, childId });
       this.linkReferences(childId, [{ key: 'value', value: formatConfig(attribute) }], scope);
       return;
@@ -162,7 +198,7 @@ class GraphBuilder {
         const itemPath = [...path, index];
         const childId = isTransform(item)
           ? this.walk(item, false, itemPath, scope)
-          : this.addLiteral(item, itemPath);
+          : this.addLiteral(item, itemPath, `${ownerId}:${label}`);
         if (!isTransform(item)) {
           this.linkReferences(childId, [{ key: 'value', value: formatConfig(item) }], scope);
         }
@@ -203,7 +239,7 @@ class GraphBuilder {
         }
         seen.add(name);
         this.edges.push({
-          id: this.nextEdgeId(),
+          id: `${binding.sourceId}>${targetId}:$${name}`,
           sourceId: binding.sourceId,
           targetId,
           inputKey: `$${name}`,
@@ -236,12 +272,12 @@ class GraphBuilder {
     }
   }
 
-  private addLiteral(value: unknown, path: JsonPath): string {
-    const id = this.nextNodeId();
+  private addLiteral(value: unknown, path: JsonPath, id: string): string {
     const text = formatConfig(value);
     this.nodes.push({
       id,
       path,
+      tree: this.tree,
       kind: 'literal',
       type: 'literal',
       label: 'Literal',
@@ -253,10 +289,11 @@ class GraphBuilder {
     return id;
   }
 
-  private addImplicit(): string {
-    const id = this.nextNodeId();
+  private addImplicit(ownerId: string): string {
+    const id = `${ownerId}:implicit`;
     this.nodes.push({
       id,
+      tree: this.tree,
       kind: 'implicit',
       type: 'implicit',
       label: 'Implicit input',
@@ -268,16 +305,38 @@ class GraphBuilder {
     });
     return id;
   }
+}
 
-  private nextNodeId(): string {
-    this.nodeCount += 1;
-    return `n${this.nodeCount}`;
+/** Inputs a user can still plug a block into: empty slots, slots holding a plain value, and list ends. */
+function openSlots(type: string, attributes: Record<string, unknown>, children: ChildLink[]): OpenSlot[] {
+  const info = blockInfo(type);
+  if (!info) {
+    return [];
   }
-
-  private nextEdgeId(): string {
-    this.edgeCount += 1;
-    return `e${this.edgeCount}`;
+  const taken = new Set(children.map((child) => child.key));
+  const slots: OpenSlot[] = [];
+  const single = (key: string, value: unknown) => {
+    if (taken.has(key) || (key === 'input' && taken.has('implicit')) || isTransform(value)) {
+      return;
+    }
+    slots.push({ key, label: key, ...(value === undefined ? {} : { value: formatConfig(value) }) });
+  };
+  for (const slot of info.slots) {
+    if (slot.multiple) {
+      slots.push({ key: `${slot.key}[+]`, label: `${slot.key} +` });
+    } else {
+      single(slot.key, attributes[slot.key]);
+    }
   }
+  if (info.variables) {
+    const known = knownAttributes(info);
+    for (const [key, value] of Object.entries(attributes)) {
+      if (!known.has(key)) {
+        single(key, value);
+      }
+    }
+  }
+  return slots;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -350,6 +409,6 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, max - 1)}…`;
 }
 
-export function graphNode(graph: TransformGraph, id: string): TransformNodeModel | undefined {
+export function graphNode(graph: TransformGraph, id: string | null): TransformNodeModel | undefined {
   return graph.nodes.find((node) => node.id === id);
 }

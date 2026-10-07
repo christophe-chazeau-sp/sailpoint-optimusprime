@@ -1,4 +1,4 @@
-import { Component, computed, output, signal } from '@angular/core';
+import { Component, computed, inject, output, signal } from '@angular/core';
 import {
   accessToken,
   bearerToken,
@@ -7,6 +7,7 @@ import {
   ListedTransform,
 } from './isc-client';
 import { resolveTenant } from './tenant-address';
+import { TenantSession } from './tenant-session';
 
 type AuthMode = 'jwt' | 'client';
 
@@ -36,6 +37,7 @@ function remember(key: string, value: string): void {
 })
 export class TenantBrowserComponent {
   readonly loaded = output<string>();
+  private readonly session = inject(TenantSession);
 
   protected readonly mode = signal<AuthMode>(stored(MODE_KEY) === 'client' ? 'client' : 'jwt');
   protected readonly tenant = signal(stored(TENANT_KEY));
@@ -112,6 +114,7 @@ export class TenantBrowserComponent {
           : await accessToken(resolved.apiBase, this.clientId().trim(), this.clientSecret().trim(), transport);
       this.status.set('Loading transforms…');
       const listed = await listTransforms(resolved.apiBase, access, transport);
+      this.session.connection.set({ apiBase: resolved.apiBase, token: access });
       this.transforms.set(listed);
       this.status.set(listed.length === 1 ? '1 transform' : `${listed.length} transforms`);
       remember(TENANT_KEY, this.tenant().trim());

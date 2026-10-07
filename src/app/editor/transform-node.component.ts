@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, HostBinding, Input, OnChanges, OnDestroy 
 import { ClassicPreset } from 'rete';
 import { RefDirective } from 'rete-angular-plugin/22';
 import { DeclaredVariable, formatValue, StepResult } from '../transform/evaluator/evaluator';
+import { ROOT_TREE } from '../transform/workspace/workspace';
 import { EditorNode, inputAnchorRatio } from './flow-node';
 import { TooltipService } from './tooltip.service';
 
@@ -9,6 +10,8 @@ interface Anchor {
   key: string;
   top: string;
   reference: boolean;
+  /** Nothing is plugged in yet. */
+  open: boolean;
   socket: ClassicPreset.Socket;
 }
 
@@ -97,6 +100,12 @@ export class TransformNodeComponent implements OnChanges, OnDestroy {
     return this.data.capsule === 'output';
   }
 
+  /** Part of a block tree that is not wired to the transform output. */
+  @HostBinding('class.detached')
+  get detached(): boolean {
+    return this.data.model.tree != null && this.data.model.tree !== ROOT_TREE;
+  }
+
   @HostBinding('class.failed')
   get failed(): boolean {
     const result = this.data.result;
@@ -113,9 +122,11 @@ export class TransformNodeComponent implements OnChanges, OnDestroy {
     const entries = Object.entries(this.data.inputs)
       .filter((entry): entry is [string, ClassicPreset.Input<ClassicPreset.Socket>] => !!entry[1])
       .sort((left, right) => (left[1].index ?? 0) - (right[1].index ?? 0));
+    const open = new Set((this.data.model.slots ?? []).map((slot) => slot.key));
     return entries.map(([key, input], index) => ({
       key,
       reference: key.startsWith('$'),
+      open: open.has(key),
       top: `${inputAnchorRatio(index, entries.length) * 100}%`,
       socket: input.socket,
     }));

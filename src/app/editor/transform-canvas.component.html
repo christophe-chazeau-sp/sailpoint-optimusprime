@@ -36,4 +36,10 @@
     </svg>
   </button>
 </div>
-<div #host class="canvas-host"></div>
+<div
+  #host
+  class="canvas-host"
+  data-testid="canvas-host"
+  (dragover)="onDragOver($event)"
+  (drop)="onDrop($event)"
+></div>

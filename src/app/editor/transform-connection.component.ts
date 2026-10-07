@@ -26,6 +26,8 @@ const CORNER_RADIUS = 12;
 const ARROW_LENGTH = 9;
 const ARROW_HALF = 4.5;
 const SELECTION_RING = 6;
+/** Outer radius of the connection dots drawn on the box edges (see transform-node.component.scss). */
+const DOT_RADIUS = 5;
 /** Boxes closer than this on one axis count as overlapping on it. */
 const SIDE_GAP = 16;
 const STRAIGHT_SNAP = 4;
@@ -35,7 +37,12 @@ const STRAIGHT_SNAP = 4;
   // The Rete connection wrapper assigns inputs imperatively and then calls detectChanges().
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
-    <svg data-testid="connection" [class.active]="active()" [class.variable]="variable()">
+    <svg
+      data-testid="connection"
+      [class.active]="active()"
+      [class.variable]="variable()"
+      [class.pseudo]="pseudo()"
+    >
       @if (start && end) {
         <path [attr.d]="stepPath()" />
         @if (arrowPoints(); as points) {
@@ -102,6 +109,16 @@ const STRAIGHT_SNAP = 4;
 
     svg.active text {
       fill: #0033a1;
+    }
+
+    svg.pseudo path {
+      stroke: #4c6ef5;
+      stroke-width: 2px;
+      stroke-dasharray: 5 4;
+    }
+
+    svg.pseudo polygon {
+      fill: #4c6ef5;
     }
 
     svg.variable path {
@@ -220,9 +237,10 @@ export class TransformConnectionComponent {
     const overlapping = Math.max(ahead, behind, below, above) < SIDE_GAP;
 
     if (ahead >= SIDE_GAP || overlapping) {
+      // The output and input dots sit on these sides, so the line runs from dot edge to dot edge.
       return {
-        start: { x: sourceRight + sourceRing, y: start.y },
-        end: { x: target.left - targetRing, y: end.y },
+        start: { x: sourceRight + sourceRing + DOT_RADIUS, y: start.y },
+        end: { x: target.left - targetRing - DOT_RADIUS, y: end.y },
         vertical: false,
       };
     }
@@ -284,6 +302,11 @@ export class TransformConnectionComponent {
 
   protected active(): boolean {
     return Boolean(this.data?.active) && !this.data?.reference;
+  }
+
+  /** The line that follows the pointer while an arrow is being drawn. */
+  protected pseudo(): boolean {
+    return Boolean((this.data as { isPseudo?: boolean } | undefined)?.isPseudo);
   }
 
   protected variable(): boolean {

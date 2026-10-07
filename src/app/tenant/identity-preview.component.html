@@ -1,0 +1,120 @@
+<section class="preview" aria-label="Identity preview" data-testid="identity-preview">
+  <h2 class="title">Preview with an identity</h2>
+
+  @if (!connected()) {
+    <p class="hint">Load transforms from a tenant above to preview this transform with one of its identities.</p>
+  } @else if (identity(); as person) {
+    <div class="person" data-testid="preview-identity">
+      <div class="person-text">
+        <strong>{{ person.displayName || person.name }}</strong>
+        <small>{{ person.email || person.name }}</small>
+      </div>
+      <button type="button" class="link" (click)="clear()">Change</button>
+    </div>
+    <p class="hint">Test values below are filled from this identity. Edit a field to override it.</p>
+
+    @if (needsImplicit()) {
+      <div class="implicit">
+        <span class="label">Implicit input: the source attribute this transform is mapped to</span>
+        @if (loadingAccounts()) {
+          <p class="hint">Loading accounts…</p>
+        } @else if (!sources().length) {
+          <p class="hint">This identity has no accounts.</p>
+        } @else {
+          <select aria-label="Source" data-testid="preview-source" [value]="sourceName()" (change)="onSource($event)">
+            <option value="">Select a source</option>
+            @for (source of sources(); track source) {
+              <option [value]="source">{{ source }}</option>
+            }
+          </select>
+          @if (sourceName()) {
+            <select
+              aria-label="Account attribute"
+              data-testid="preview-attribute"
+              [value]="attributeName()"
+              (change)="onAttribute($event)"
+            >
+              <option value="">Select an attribute</option>
+              @for (name of attributeNames(); track name) {
+                <option [value]="name">{{ name }}</option>
+              }
+            </select>
+          }
+          @if (attributeName()) {
+            <p class="hint mono">{{ implicitValue() ?? 'null' }}</p>
+          }
+        }
+      </div>
+    }
+
+    <button
+      type="button"
+      class="run"
+      data-testid="preview-run"
+      [disabled]="!document() || run()?.state === 'busy'"
+      (click)="runOnTenant()"
+    >
+      {{ run()?.state === 'busy' ? 'Running on tenant…' : 'Run on tenant' }}
+    </button>
+    <p class="hint">Saves a temporary copy of the transform, previews it on this identity, then deletes the copy.</p>
+
+    @if (run(); as outcome) {
+      @if (outcome.state === 'failed') {
+        <p class="error" role="alert">{{ outcome.error }}</p>
+      } @else if (outcome.state === 'done') {
+        <div class="tenant-result" [class.failed]="outcome.preview.errors.length" data-testid="preview-result">
+          <span class="label">Tenant output</span>
+          @if (outcome.preview.errors.length) {
+            @for (text of outcome.preview.errors; track $index) {
+              <output>{{ text }}</output>
+            }
+          } @else {
+            <output>{{ outcome.preview.value ?? 'null' }}</output>
+          }
+        </div>
+        @if (stale()) {
+          <p class="hint">The transform changed since this run.</p>
+        } @else if (agreement() === 'match') {
+          <p class="badge match" data-testid="preview-agreement">Matches the local result</p>
+        } @else if (agreement() === 'differ') {
+          <p class="badge differ" data-testid="preview-agreement">Differs from the local result</p>
+        }
+      }
+    }
+  } @else {
+    <div class="search">
+      <input
+        type="search"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="Name or email"
+        aria-label="Search identities"
+        data-testid="preview-search"
+        [value]="query()"
+        (input)="onQuery($event)"
+        (keydown.enter)="search()"
+      />
+      <button type="button" class="run" [disabled]="searching()" (click)="search()">
+        {{ searching() ? '…' : 'Search' }}
+      </button>
+    </div>
+    @if (results(); as found) {
+      <ul class="results">
+        @for (person of found; track person.id) {
+          <li>
+            <button type="button" data-testid="preview-candidate" (click)="pick(person)">
+              <strong>{{ person.displayName || person.name }}</strong>
+              <small>{{ person.email || person.name }}</small>
+            </button>
+          </li>
+        } @empty {
+          <li class="hint">No identity matches.</li>
+        }
+      </ul>
+    }
+  }
+
+  @if (error(); as text) {
+    <p class="error" role="alert">{{ text }}</p>
+  }
+</section>

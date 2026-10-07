@@ -32,6 +32,13 @@ describe('parseTransform', () => {
     ]);
   });
 
+  it('shows no implicit input for a dateMath computed from now', () => {
+    const fromNow = parseTransform({ type: 'dateMath', attributes: { expression: 'now+45d' } });
+    const fromInput = parseTransform({ type: 'dateMath', attributes: { expression: '+45d' } });
+    expect(fromNow.ok && fromNow.graph.nodes.some((node) => node.kind === 'implicit')).toBe(false);
+    expect(fromInput.ok && fromInput.graph.nodes.some((node) => node.kind === 'implicit')).toBe(true);
+  });
+
   it('uses an explicit account attribute instead of an implicit input', () => {
     const result = parseTransform({
       name: 'Lowercase Department',

@@ -92,6 +92,13 @@ const editorTheme = EditorView.theme({
   },
 });
 
+const jsonLinter = jsonParseLinter();
+
+/** An empty editor means a transform with nothing connected yet, not a syntax error. */
+function emptyAwareJsonLinter(view: EditorView) {
+  return view.state.doc.toString().trim() ? jsonLinter(view) : [];
+}
+
 @Component({
   selector: 'app-json-editor',
   template: '<div #host class="host"></div>',
@@ -138,7 +145,7 @@ export class JsonEditorComponent implements AfterViewInit, OnChanges, OnDestroy 
           json(),
           ...(this.readOnly
             ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
-            : [linter(jsonParseLinter()), lintGutter()]),
+            : [linter(emptyAwareJsonLinter), lintGutter()]),
           syntaxHighlighting(jsonColors),
           highlightField,
           editorTheme,

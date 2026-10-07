@@ -15,12 +15,14 @@ import { ClassicPreset, GetSchemes, NodeEditor } from 'rete';
 import { AngularArea2D, AngularPlugin, Presets } from 'rete-angular-plugin/22';
 import { AreaExtensions, AreaPlugin } from 'rete-area-plugin';
 import { AutoArrangePlugin, Preset as ArrangePreset } from 'rete-auto-arrange-plugin';
+import { ConnectionPlugin } from 'rete-connection-plugin';
 import { MinimapExtra, MinimapPlugin } from 'rete-minimap-plugin';
 import { getDOMSocketPosition } from 'rete-render-utils';
 import { formatValue, StepResult } from '../transform/evaluator/evaluator';
 import { TransformGraph, TransformNodeModel } from '../transform/model/transform-graph';
 import { presentNode } from '../transform/presentation';
 import { AnchorSocketComponent } from './anchor-socket.component';
+import { EditFlow, EditFlowHandlers } from './edit-flow';
 import {
   capsuleSize,
   CapsuleRole,
@@ -59,11 +61,39 @@ function sameInputs(current: NodeInputValue[], next: NodeInputValue[]): boolean 
 type Schemes = GetSchemes<EditorNode, FlowConnection>;
 type AreaExtra = AngularArea2D<Schemes> | MinimapExtra;
 
-const TRANSFORM_INPUT_ID = 'transform-input';
-const TRANSFORM_OUTPUT_ID = 'transform-output';
+export const TRANSFORM_INPUT_ID = 'transform-input';
+export const TRANSFORM_OUTPUT_ID = 'transform-output';
+/** Drag data type of a palette entry; the payload is the block type. */
+export const BLOCK_MIME = 'application/x-transform-block';
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/** Plug the source step into an input of the target. Ids are graph node ids. */
+export interface ConnectRequest {
+  sourceId: string;
+  targetId: string;
+  inputKey: string;
+}
+
+export interface DisconnectRequest {
+  targetId: string;
+  inputKey: string;
+}
+
+/** A palette block dropped at a point of the canvas content. */
+export interface BlockDrop {
+  type: string;
+  position: Point;
+}
 
 const PORT_SIZE = 2;
 const FIT_SCALE = 0.85;
+const MAX_FIT_ZOOM = 1.4;
+const PLACE_GAP = 80;
+const DOUBLE_PICK_MS = 400;
 
 const LAYOUT_OPTIONS = {
   'elk.algorithm': 'layered',
@@ -108,8 +138,14 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
   @Input() selectedId: string | null = null;
   /** Calculated value of each step, keyed by graph node id. */
   @Input() results: Map<string, StepResult> | null = null;
+  /** Changing it re-arranges every box and fits the view on the next draw, as for a new document. */
+  @Input() layoutKey = 0;
 
   readonly nodeSelected = output<TransformNodeModel | null>();
+  readonly nodeEdit = output<TransformNodeModel>();
+  readonly connectRequest = output<ConnectRequest>();
+  readonly disconnectRequest = output<DisconnectRequest>();
+  readonly blockDropped = output<BlockDrop>();
   protected readonly mountError = signal<string | null>(null);
   protected readonly minimapOpen = signal(false);
 
@@ -121,6 +157,11 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
   private renderVersion = 0;
   private renderChain: Promise<void> = Promise.resolve();
   private ready = false;
+  /** Where each box was, by graph node id, so edits redraw without moving anything. */
+  private readonly positions = new Map<string, Point>();
+  private appliedLayoutKey: number | null = null;
+  /** Spot for the next block added to the canvas. */
+  private pendingPlacement: Point | null = null;
 
   constructor(private readonly injector: Injector) {}
 
@@ -133,7 +174,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     if (!this.ready) {
       return;
     }
-    if (changes['graph']) {
+    if (changes['graph'] || changes['layoutKey']) {
       this.scheduleRender();
       return;
     }
@@ -197,13 +238,13 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     }
   }
 
-  /** Value carried into this node by each incoming arrow. */
+  /** Value carried into this node by each incoming arrow, then the inputs still open. */
   private inputValues(node: EditorNode): NodeInputValue[] {
     const editor = this.editor;
     if (!editor) {
       return [];
     }
-    return editor
+    const carried = editor
       .getConnections()
       .filter((connection) => connection.target === node.id)
       .map((connection) => {
@@ -217,9 +258,18 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
           text: this.carriedText(connection, result, literal),
         };
       })
-      .filter((item) => item.text !== '')
+      .filter((item) => item.text !== '');
+    const open = (node.model.slots ?? [])
+      .filter((slot) => node.inputs[slot.key])
+      .map((slot) => ({
+        index: node.inputs[slot.key]?.index ?? 0,
+        key: slot.key.endsWith('[+]') ? slot.key.slice(0, -3) : slot.key,
+        text: slot.value ?? (slot.key.endsWith('[+]') ? '+ add' : 'empty'),
+        open: true,
+      }));
+    return [...carried, ...open]
       .sort((left, right) => left.index - right.index)
-      .map(({ key, text }) => ({ key, text }));
+      .map(({ index: _index, ...item }) => item);
   }
 
   /** A variable arrow carries the declared value, not the conditional's own output. */
@@ -276,6 +326,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
           : 'Value produced by the whole transform.',
       attributes: [],
       unknownType: false,
+      ...(role === 'output' && !this.graph?.rootId ? { slots: [{ key: 'value', label: 'Output' }] } : {}),
     };
     const node = new FlowNode(model, {
       category: role === 'input' ? 'Input' : 'Output',
@@ -333,12 +384,84 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   protected async resetZoom(): Promise<void> {
+    await this.fit();
+  }
+
+  /** Puts the next block added at `position` (canvas content coordinates), or mid-view when null. */
+  placeNextBlock(position: Point | null): void {
+    this.pendingPlacement = position ?? this.viewportCenter();
+  }
+
+  /** Redraws from the current graph, for instance after a gesture the document rejected. */
+  refresh(): void {
+    this.scheduleRender();
+  }
+
+  protected onDragOver(event: DragEvent): void {
+    if (event.dataTransfer?.types.includes(BLOCK_MIME)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }
+
+  protected onDrop(event: DragEvent): void {
+    const type = event.dataTransfer?.getData(BLOCK_MIME);
+    if (!type) {
+      return;
+    }
+    event.preventDefault();
+    this.blockDropped.emit({ type, position: this.contentPoint(event.clientX, event.clientY) });
+  }
+
+  private contentPoint(clientX: number, clientY: number): Point {
+    const host = this.host().nativeElement;
+    const rect = host.getBoundingClientRect();
+    const transform = this.area?.area.transform ?? { x: 0, y: 0, k: 1 };
+    return {
+      x: (clientX - rect.left - transform.x) / transform.k,
+      y: (clientY - rect.top - transform.y) / transform.k,
+    };
+  }
+
+  private viewportCenter(): Point {
+    const rect = this.host().nativeElement.getBoundingClientRect();
+    return this.contentPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  }
+
+  /** Fits every box in view, without blowing a lone box up past a readable size. */
+  private async fit(): Promise<void> {
     const area = this.area;
     const editor = this.editor;
     if (!area || !editor) {
       return;
     }
-    await AreaExtensions.zoomAt(area, editor.getNodes(), { scale: FIT_SCALE });
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    for (const node of editor.getNodes()) {
+      const view = area.nodeViews.get(node.id);
+      if (!view) {
+        continue;
+      }
+      left = Math.min(left, view.position.x);
+      top = Math.min(top, view.position.y);
+      right = Math.max(right, view.position.x + node.width);
+      bottom = Math.max(bottom, view.position.y + node.height);
+    }
+    const host = this.host().nativeElement;
+    const width = host.clientWidth;
+    const height = host.clientHeight;
+    if (!Number.isFinite(left) || width === 0 || height === 0) {
+      return;
+    }
+    const zoom = Math.min(
+      MAX_FIT_ZOOM,
+      (width * FIT_SCALE) / Math.max(1, right - left),
+      (height * FIT_SCALE) / Math.max(1, bottom - top),
+    );
+    await area.area.zoom(zoom, 0, 0);
+    await area.area.translate(width / 2 - ((left + right) / 2) * zoom, height / 2 - ((top + bottom) / 2) * zoom);
   }
 
   protected async resetEverything(): Promise<void> {
@@ -449,10 +572,14 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       }
       return context;
     });
+    const connections = new ConnectionPlugin<Schemes, AreaExtra>();
+    connections.addPreset(() => new EditFlow<Schemes>(this.flowHandlers));
+
     editor.use(area);
     area.use(render);
     area.use(arrange);
     area.use(minimap);
+    area.use(connections);
     minimap.element.classList.add('minimap');
 
     this.selection = AreaExtensions.selectableNodes(area, AreaExtensions.selector(), {
@@ -479,6 +606,9 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
           return context;
         }
         this.nodeSelected.emit(node?.model ?? null);
+        if (node) {
+          this.detectDoublePick(node);
+        }
       } else if (context.type === 'pointerdown') {
         const target = context.data.event.target;
         if (
@@ -502,6 +632,59 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     this.ready = true;
   }
 
+  private lastPick: { id: string; time: number } | null = null;
+
+  /**
+   * Picking a box moves its element to the front, which stops the browser from ever firing
+   * dblclick on it; two picks of the same box in quick succession count as a double-click instead.
+   */
+  private detectDoublePick(node: EditorNode): void {
+    const now = performance.now();
+    const previous = this.lastPick;
+    if (previous && previous.id === node.model.id && now - previous.time < DOUBLE_PICK_MS) {
+      this.lastPick = null;
+      if (node.model.kind === 'operation') {
+        this.nodeEdit.emit(node.model);
+      }
+      return;
+    }
+    this.lastPick = { id: node.model.id, time: now };
+  }
+
+  private modelOf(nodeId: string): TransformNodeModel | undefined {
+    return this.editor?.getNode(nodeId)?.model;
+  }
+
+  private readonly flowHandlers: EditFlowHandlers = {
+    canStart: (socket) =>
+      socket.side === 'output' ? socket.key === 'out' : !socket.key.startsWith('$'),
+    canConnect: (source, target) => {
+      const from = this.editor?.getNode(source.nodeId);
+      const to = this.editor?.getNode(target.nodeId);
+      if (!from || !to || from.id === to.id || source.key !== 'out' || target.key.startsWith('$')) {
+        return false;
+      }
+      if (from.capsule === 'input') {
+        return target.key === 'input' || target.key === 'implicit';
+      }
+      return true;
+    },
+    connect: (source, target) => {
+      const from = this.modelOf(source.nodeId);
+      const to = this.modelOf(target.nodeId);
+      if (from && to) {
+        this.connectRequest.emit({ sourceId: from.id, targetId: to.id, inputKey: target.key });
+      }
+    },
+    disconnect: (target) => {
+      const to = this.modelOf(target.nodeId);
+      if (to) {
+        this.disconnectRequest.emit({ targetId: to.id, inputKey: target.key });
+      }
+    },
+    cancel: () => this.scheduleRender(),
+  };
+
   /** Runs one draw at a time so a newer document cannot leave the previous arrows behind. */
   private scheduleRender(): void {
     const version = ++this.renderVersion;
@@ -517,6 +700,13 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       return;
     }
 
+    const fresh = this.appliedLayoutKey !== this.layoutKey;
+    this.appliedLayoutKey = this.layoutKey;
+    if (fresh) {
+      this.positions.clear();
+    } else {
+      this.rememberPositions();
+    }
     await this.clear(editor);
 
     const graph = this.graph;
@@ -535,18 +725,28 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       node.result = this.results?.get(model.id);
       if (model.kind === 'literal') {
         this.fitCapsule(node, 'literal', view.title);
-      } else {
-        node.width = NODE_WIDTH;
-        const inputCount = graph.edges.filter((edge) => edge.targetId === model.id).length;
-        node.height = nodeHeight(view, inputCount, variableHeight(node.result?.variables?.length ?? 0));
       }
-      graph.edges
-        .filter((edge) => edge.targetId === model.id)
-        .forEach((edge, index) => {
-          const input = new ClassicPreset.Input(valueSocket, edge.label);
-          input.index = index;
-          node.addInput(edge.inputKey, input);
-        });
+      const incoming = graph.edges.filter((edge) => edge.targetId === model.id);
+      incoming.forEach((edge, index) => {
+        const input = new ClassicPreset.Input(valueSocket, edge.label);
+        input.index = index;
+        node.addInput(edge.inputKey, input);
+      });
+      for (const slot of model.slots ?? []) {
+        if (!node.inputs[slot.key]) {
+          const input = new ClassicPreset.Input(valueSocket, slot.label);
+          input.index = Object.keys(node.inputs).length;
+          node.addInput(slot.key, input);
+        }
+      }
+      if (model.kind !== 'literal') {
+        node.width = NODE_WIDTH;
+        node.height = nodeHeight(
+          view,
+          Object.keys(node.inputs).length,
+          variableHeight(node.result?.variables?.length ?? 0),
+        );
+      }
       node.addOutput('out', new ClassicPreset.Output(valueSocket, 'Output'));
       if (graph.edges.some((edge) => edge.reference && edge.sourceId === model.id)) {
         node.addOutput('ref', new ClassicPreset.Output(valueSocket, 'Variable'));
@@ -584,7 +784,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       }
     }
 
-    const root = nodes.get(graph.rootId);
+    const root = graph.rootId ? nodes.get(graph.rootId) : undefined;
     const outputNode = nodes.get(TRANSFORM_OUTPUT_ID);
     if (root && outputNode) {
       const connection = new FlowConnection(root, outputNode, 'value', '');
@@ -594,10 +794,127 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
 
     // Input lines and results change box heights, which move the anchors; size first, then lay out.
     this.applyResults();
-    await this.layoutNodes();
-
-    await AreaExtensions.zoomAt(area, editor.getNodes(), { scale: FIT_SCALE });
+    if (fresh) {
+      await this.layoutNodes();
+      await this.fit();
+    } else {
+      await this.restorePositions();
+      this.updateReferenceLanes();
+    }
     await this.syncSelection();
+  }
+
+  private rememberPositions(): void {
+    const editor = this.editor;
+    const area = this.area;
+    if (!editor || !area) {
+      return;
+    }
+    for (const node of editor.getNodes()) {
+      const view = area.nodeViews.get(node.id);
+      if (view) {
+        this.positions.set(node.model.id, { ...view.position });
+      }
+    }
+  }
+
+  /** Boxes go back where they were; new ones go to the drop spot or next to a box they connect to. */
+  private async restorePositions(): Promise<void> {
+    const editor = this.editor;
+    const area = this.area;
+    if (!editor || !area) {
+      return;
+    }
+    const placed = new Map<string, Point>();
+    const unplaced: EditorNode[] = [];
+    for (const node of editor.getNodes()) {
+      const position = this.positions.get(node.model.id);
+      if (position) {
+        placed.set(node.id, position);
+      } else {
+        unplaced.push(node);
+      }
+    }
+
+    const spot = this.pendingPlacement;
+    this.pendingPlacement = null;
+    if (spot) {
+      const added =
+        unplaced.find((node) => node.model.floating) ?? unplaced.find((node) => node.model.kind === 'operation');
+      if (added) {
+        const centred = { x: spot.x - added.width / 2, y: spot.y - added.height / 2 };
+        placed.set(added.id, this.freeSpot(added, centred, placed));
+        unplaced.splice(unplaced.indexOf(added), 1);
+      }
+    }
+
+    const links = editor.getConnections().filter((connection) => !connection.reference);
+    for (let pass = 0; pass < 4 && unplaced.length > 0; pass++) {
+      for (const node of [...unplaced]) {
+        const position = this.besideNeighbour(node, links, placed);
+        if (position) {
+          placed.set(node.id, this.freeSpot(node, position, placed));
+          unplaced.splice(unplaced.indexOf(node), 1);
+        }
+      }
+    }
+    const center = this.viewportCenter();
+    for (const node of unplaced) {
+      placed.set(node.id, this.freeSpot(node, { x: center.x - node.width / 2, y: center.y }, placed));
+    }
+
+    for (const [id, position] of placed) {
+      await area.translate(id, position);
+    }
+  }
+
+  private besideNeighbour(node: EditorNode, links: FlowConnection[], placed: Map<string, Point>): Point | null {
+    const editor = this.editor;
+    if (!editor) {
+      return null;
+    }
+    const downstream = links.find((link) => link.source === node.id && placed.has(link.target));
+    if (downstream) {
+      const target = editor.getNode(downstream.target);
+      const at = placed.get(downstream.target) as Point;
+      return { x: at.x - node.width - PLACE_GAP, y: at.y + ((target?.height ?? 0) - node.height) / 2 };
+    }
+    const upstream = links.find((link) => link.target === node.id && placed.has(link.source));
+    if (upstream) {
+      const source = editor.getNode(upstream.source);
+      const at = placed.get(upstream.source) as Point;
+      return { x: at.x + (source?.width ?? 0) + PLACE_GAP, y: at.y + ((source?.height ?? 0) - node.height) / 2 };
+    }
+    return null;
+  }
+
+  /** Slides a new box down until it no longer covers a placed one. */
+  private freeSpot(node: EditorNode, start: Point, placed: Map<string, Point>): Point {
+    const editor = this.editor;
+    const position = { ...start };
+    for (let attempt = 0; attempt < 50; attempt++) {
+      let blocker: { bottom: number } | null = null;
+      for (const [id, at] of placed) {
+        const other = editor?.getNode(id);
+        if (!other || id === node.id) {
+          continue;
+        }
+        const overlaps =
+          position.x < at.x + other.width + 16 &&
+          position.x + node.width + 16 > at.x &&
+          position.y < at.y + other.height + 16 &&
+          position.y + node.height + 16 > at.y;
+        if (overlaps) {
+          blocker = { bottom: at.y + other.height };
+          break;
+        }
+      }
+      if (!blocker) {
+        break;
+      }
+      position.y = blocker.bottom + 24;
+    }
+    return position;
   }
 
   private async syncSelection(): Promise<void> {
