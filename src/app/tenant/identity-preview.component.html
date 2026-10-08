@@ -2,7 +2,7 @@
   <h2 class="title">Preview with an identity</h2>
 
   @if (!connected()) {
-    <p class="hint">Load transforms from a tenant above to preview this transform with one of its identities.</p>
+    <p class="hint">Connect to a tenant above to preview this transform with one of its identities.</p>
   } @else if (identity(); as person) {
     <div class="person" data-testid="preview-identity">
       <div class="person-text">

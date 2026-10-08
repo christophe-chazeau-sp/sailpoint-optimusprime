@@ -7,11 +7,24 @@ import {
   listTransforms,
   previewOnTenant,
   searchIdentities,
+  tokenClaims,
 } from './isc-client';
 
 describe('isc client', () => {
   it('strips a Bearer prefix from a pasted token', () => {
     expect(bearerToken('  Bearer abc.def.ghi  ')).toBe('abc.def.ghi');
+  });
+
+  it('reads the expiry and issuer of a JWT', () => {
+    const payload = btoa(JSON.stringify({ exp: 1_800_000_000, iss: 'https://Acme.api.identitynow.com/' }))
+      .replace(/=+$/, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_');
+    expect(tokenClaims(`header.${payload}.signature`)).toEqual({
+      expiresAt: 1_800_000_000_000,
+      issuer: 'https://acme.api.identitynow.com',
+    });
+    expect(tokenClaims('not-a-jwt')).toBeNull();
   });
 
   it('exchanges a client id and secret, then lists transforms', async () => {

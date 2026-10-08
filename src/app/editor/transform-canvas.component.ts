@@ -146,6 +146,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
   readonly connectRequest = output<ConnectRequest>();
   readonly disconnectRequest = output<DisconnectRequest>();
   readonly blockDropped = output<BlockDrop>();
+  readonly helpRequested = output<void>();
   protected readonly mountError = signal<string | null>(null);
   protected readonly minimapOpen = signal(false);
 

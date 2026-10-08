@@ -332,6 +332,34 @@ function textValues(value: unknown): Record<string, string | null> {
   return values;
 }
 
+export interface TokenClaims {
+  /** Expiry, in milliseconds since the epoch. */
+  expiresAt: number | null;
+  /** API origin of the tenant that issued the token, such as `https://acme.api.identitynow.com`. */
+  issuer: string | null;
+}
+
+/** Reads the expiry and issuer of a JWT without checking its signature; null when it is not a JWT. */
+export function tokenClaims(token: string): TokenClaims | null {
+  const payload = token.split('.')[1];
+  if (!payload) {
+    return null;
+  }
+  try {
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='))) as unknown;
+    if (!isRecord(claims)) {
+      return null;
+    }
+    return {
+      expiresAt: typeof claims['exp'] === 'number' ? claims['exp'] * 1000 : null,
+      issuer: typeof claims['iss'] === 'string' ? claims['iss'].replace(/\/+$/, '').toLowerCase() : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function bearerToken(value: string): string {
   return value.trim().replace(/^Bearer\s+/i, '');
 }

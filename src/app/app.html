@@ -1,17 +1,17 @@
 <div class="shell" [class.resizing]="resizing()" [style.grid-template-columns]="shellColumns()">
-  <aside class="pane source" [class.collapsed]="!leftOpen()">
+  <aside class="pane source" data-guide="source" [class.collapsed]="!leftOpen()">
     @if (leftOpen()) {
       <header class="brand">
         <img class="logo" src="sailpoint-logo.svg" alt="SailPoint" width="36" height="36" />
         <div>
           <p class="eyebrow">Identity Security Cloud</p>
-          <h1>Transform</h1>
+          <h1>Transform visualizer and editor</h1>
         </div>
       </header>
 
-      <app-tenant-browser (loaded)="onTenantTransform($event)" />
+      <app-tenant-browser data-guide="tenant" (loaded)="onTenantTransform($event)" />
 
-      <label class="field">
+      <label class="field" data-guide="examples">
         <span>Example</span>
         <select [value]="exampleId()" (change)="loadExample($event)">
           @if (!exampleId()) {
@@ -24,7 +24,7 @@
         </select>
       </label>
 
-      <div class="field grow">
+      <div class="field grow" data-guide="json">
         <span>JSON document</span>
         <app-json-editor
           class="editor"
@@ -36,13 +36,14 @@
       </div>
 
       <app-identity-preview
+        data-guide="preview"
         [document]="connectedDocument()"
         [needsImplicit]="needsImplicit()"
         [localResult]="evaluation().result"
         (contextChange)="onPreviewContext($event)"
       />
 
-      <section class="test" aria-label="Test values">
+      <section class="test" data-guide="test" aria-label="Test values">
         <h2 class="test-title">Test values</h2>
         <div class="test-fields">
           @for (input of requirements(); track input.kind + ':' + input.key) {
@@ -106,7 +107,7 @@
     </button>
   </aside>
 
-  <aside class="palette" [class.collapsed]="!paletteOpen()" data-testid="palette">
+  <aside class="palette" [class.collapsed]="!paletteOpen()" data-testid="palette" data-guide="palette">
     @if (paletteOpen()) {
       <app-block-palette (add)="onPaletteAdd($event)" />
     }
@@ -132,7 +133,7 @@
     </button>
   </aside>
 
-  <main class="canvas">
+  <main class="canvas" data-guide="canvas">
     <app-transform-canvas
       [graph]="graph()"
       [selectedId]="selected()?.id ?? null"
@@ -143,6 +144,7 @@
       (connectRequest)="onConnectRequest($event)"
       (disconnectRequest)="onDisconnectRequest($event)"
       (blockDropped)="onBlockDropped($event)"
+      (helpRequested)="guide.set('intro')"
     />
     <div class="edit-tools">
       <button type="button" data-testid="undo" title="Undo (Ctrl+Z)" aria-label="Undo" [disabled]="!canUndo()" (click)="undo()">
@@ -160,7 +162,7 @@
     }
   </main>
 
-  <aside class="inspector" [class.collapsed]="!inspectorOpen()">
+  <aside class="inspector" data-guide="inspector" [class.collapsed]="!inspectorOpen()">
     <button
       type="button"
       class="collapse"
@@ -308,6 +310,11 @@
     (save)="onFormSave($event)"
     (cancel)="onFormCancel()"
   />
+}
+@if (guide() === 'intro') {
+  <app-quick-guide (closed)="guide.set('closed')" (tour)="guide.set('tour')" />
+} @else if (guide() === 'tour') {
+  <app-guide-tour [steps]="guideSteps" (prepare)="onGuideStep($event)" (closed)="guide.set('closed')" />
 }
 @if (tooltip.current(); as tip) {
   <div

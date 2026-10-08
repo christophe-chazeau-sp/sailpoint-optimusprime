@@ -12,6 +12,9 @@ import {
   TRANSFORM_OUTPUT_ID,
 } from './editor/transform-canvas.component';
 import { TooltipService } from './editor/tooltip.service';
+import { GuideStep, GUIDE_STEPS } from './guide/guide-steps';
+import { GuideTourComponent } from './guide/guide-tour.component';
+import { QuickGuideComponent } from './guide/quick-guide.component';
 import { IdentityPreviewComponent, PreviewContext } from './tenant/identity-preview.component';
 import { TenantBrowserComponent } from './tenant/tenant-browser.component';
 import { blockInfo } from './transform/catalog/blocks';
@@ -103,9 +106,9 @@ function inputId(input: Pick<RequiredInput, 'kind' | 'key'>): string {
   return `${input.kind}:${input.key}`;
 }
 
-function storedOpen(key: string): boolean {
+function storedOpen(key: string, fallback = true): boolean {
   const raw = storageGet(key);
-  return raw == null ? true : raw === '1';
+  return raw == null ? fallback : raw === '1';
 }
 
 /** Where a canvas input key such as `values[1]`, `values[+]` or `implicit` lands in the block. */
@@ -143,6 +146,8 @@ interface FormRequest {
     JsonEditorComponent,
     TenantBrowserComponent,
     IdentityPreviewComponent,
+    QuickGuideComponent,
+    GuideTourComponent,
     BlockPaletteComponent,
     BlockFormComponent,
   ],
@@ -315,7 +320,8 @@ export class App {
   protected readonly maxLeftWidth = MAX_LEFT_WIDTH;
   protected readonly leftWidth = signal(storedLeftWidth());
   protected readonly leftOpen = signal(storedOpen(LEFT_PANE_OPEN_KEY));
-  protected readonly paletteOpen = signal(storedOpen(PALETTE_OPEN_KEY));
+  /** Folded until the user first opens it. */
+  protected readonly paletteOpen = signal(storedOpen(PALETTE_OPEN_KEY, false));
   protected readonly resizing = signal(false);
   protected readonly shellColumns = computed(() => {
     const left = this.leftOpen() ? `${this.leftWidth()}px` : '0px';
@@ -350,6 +356,20 @@ export class App {
     const lines = this.selectedJson()?.split('\n').length ?? 0;
     return `${Math.min(420, lines * 19 + 14)}px`;
   });
+
+  /** The help popup, then the guided tour it can start. */
+  protected readonly guide = signal<'closed' | 'intro' | 'tour'>('closed');
+  protected readonly guideSteps = GUIDE_STEPS;
+
+  protected onGuideStep(step: GuideStep): void {
+    if (step.pane === 'source' && !this.leftOpen()) {
+      this.toggleLeft();
+    } else if (step.pane === 'palette' && !this.paletteOpen()) {
+      this.togglePalette();
+    } else if (step.pane === 'inspector' && !this.inspectorOpen()) {
+      this.toggleInspector();
+    }
+  }
 
   protected toggleInspector(): void {
     this.inspectorOpen.update((open) => !open);
@@ -656,7 +676,7 @@ export class App {
   }
 
   protected onKeydown(event: KeyboardEvent): void {
-    if (this.form() || this.isTextTarget(event.target)) {
+    if (this.form() || this.guide() !== 'closed' || this.isTextTarget(event.target)) {
       return;
     }
     const key = event.key.toLowerCase();

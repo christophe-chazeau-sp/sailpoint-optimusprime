@@ -4,6 +4,20 @@
 <div class="canvas-tools">
   <button
     type="button"
+    class="help"
+    data-testid="help-toggle"
+    aria-label="Quick guide"
+    title="Quick guide"
+    (click)="helpRequested.emit()"
+  >
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.5" />
+      <path d="M6.1 6.2a2 2 0 1 1 2.6 1.9c-.5.2-.7.5-.7 1v.4" />
+      <circle class="fill" cx="8" cy="11.6" r="0.4" />
+    </svg>
+  </button>
+  <button
+    type="button"
     data-testid="minimap-toggle"
     [attr.aria-label]="minimapOpen() ? 'Hide minimap' : 'Show minimap'"
     [title]="minimapOpen() ? 'Hide minimap' : 'Show minimap'"
