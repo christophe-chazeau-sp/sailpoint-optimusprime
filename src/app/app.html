@@ -1,29 +1,30 @@
 <div class="shell" [class.resizing]="resizing()" [style.grid-template-columns]="shellColumns()">
-  <aside class="pane source" [class.collapsed]="!leftOpen()">
+  <aside class="pane source" data-guide="source" [class.collapsed]="!leftOpen()">
     @if (leftOpen()) {
       <header class="brand">
         <img class="logo" src="sailpoint-logo.svg" alt="SailPoint" width="36" height="36" />
         <div>
           <p class="eyebrow">Identity Security Cloud</p>
-          <h1>Transform</h1>
+          <h1>Transform visualizer and editor</h1>
         </div>
       </header>
 
-      <app-tenant-browser (loaded)="onTenantTransform($event)" />
+      <app-tenant-browser data-guide="tenant" (loaded)="onTenantTransform($event)" />
 
-      <label class="field">
+      <label class="field" data-guide="examples">
         <span>Example</span>
         <select [value]="exampleId()" (change)="loadExample($event)">
           @if (!exampleId()) {
             <option value="">Custom document</option>
           }
+          <option [value]="blankExampleId">New empty transform</option>
           @for (example of examples; track example.id) {
             <option [value]="example.id">{{ example.label }}</option>
           }
         </select>
       </label>
 
-      <div class="field grow">
+      <div class="field grow" data-guide="json">
         <span>JSON document</span>
         <app-json-editor
           class="editor"
@@ -34,7 +35,15 @@
         />
       </div>
 
-      <section class="test" aria-label="Test values">
+      <app-identity-preview
+        data-guide="preview"
+        [document]="connectedDocument()"
+        [needsImplicit]="needsImplicit()"
+        [localResult]="evaluation().result"
+        (contextChange)="onPreviewContext($event)"
+      />
+
+      <section class="test" data-guide="test" aria-label="Test values">
         <h2 class="test-title">Test values</h2>
         <div class="test-fields">
           @for (input of requirements(); track input.kind + ':' + input.key) {
@@ -98,16 +107,62 @@
     </button>
   </aside>
 
-  <main class="canvas">
+  <aside class="palette" [class.collapsed]="!paletteOpen()" data-testid="palette" data-guide="palette">
+    @if (paletteOpen()) {
+      <app-block-palette (add)="onPaletteAdd($event)" />
+    }
+    <button
+      type="button"
+      class="collapse"
+      data-testid="palette-toggle"
+      [attr.aria-label]="paletteOpen() ? 'Hide blocks pane' : 'Show blocks pane'"
+      [title]="paletteOpen() ? 'Hide blocks' : 'Show blocks'"
+      [attr.aria-expanded]="paletteOpen()"
+      (click)="togglePalette()"
+    >
+      @if (paletteOpen()) {
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3L5 8l5 5" /></svg>
+      } @else {
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" />
+          <rect x="9" y="2.5" width="4.5" height="4.5" rx="1" />
+          <rect x="2.5" y="9" width="4.5" height="4.5" rx="1" />
+          <path d="M11.25 9.5v3.5M9.5 11.25H13" />
+        </svg>
+      }
+    </button>
+  </aside>
+
+  <main class="canvas" data-guide="canvas">
     <app-transform-canvas
       [graph]="graph()"
       [selectedId]="selected()?.id ?? null"
       [results]="nodeResults()"
+      [layoutKey]="layoutKey()"
       (nodeSelected)="onSelected($event)"
+      (nodeEdit)="onNodeEdit($event)"
+      (connectRequest)="onConnectRequest($event)"
+      (disconnectRequest)="onDisconnectRequest($event)"
+      (blockDropped)="onBlockDropped($event)"
+      (helpRequested)="guide.set('intro')"
     />
+    <div class="edit-tools">
+      <button type="button" data-testid="undo" title="Undo (Ctrl+Z)" aria-label="Undo" [disabled]="!canUndo()" (click)="undo()">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3 2.5 6l3 3" /><path d="M2.5 6h7a4 4 0 0 1 0 8H7" /></svg>
+      </button>
+      <button type="button" data-testid="redo" title="Redo (Ctrl+Y)" aria-label="Redo" [disabled]="!canRedo()" (click)="redo()">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 3l3 3-3 3" /><path d="M13.5 6h-7a4 4 0 0 0 0 8H9" /></svg>
+      </button>
+    </div>
+    @if (notice(); as message) {
+      <p class="notice" role="status" data-testid="notice">{{ message }}</p>
+    }
+    @if (!graph().rootId && !graph().nodes.length) {
+      <p class="canvas-hint">Drag a block from the Blocks pane, or double-click one, then connect it to <strong>out</strong>.</p>
+    }
   </main>
 
-  <aside class="inspector" [class.collapsed]="!inspectorOpen()">
+  <aside class="inspector" data-guide="inspector" [class.collapsed]="!inspectorOpen()">
     <button
       type="button"
       class="collapse"
@@ -129,6 +184,19 @@
         @if (selected(); as node) {
           <h2 class="inspector-title">{{ selectedView()?.title }}</h2>
           <p class="inspector-category">{{ selectedView()?.category }}</p>
+          @if (node.path) {
+            <div class="inspector-actions">
+              @if (node.kind === 'operation') {
+                <button type="button" data-testid="edit-block" (click)="editSelected()">Edit</button>
+              }
+              <button type="button" class="danger" data-testid="delete-block" title="Delete (Del)" (click)="deleteSelected()">
+                Delete
+              </button>
+            </div>
+          }
+          @if (node.floating) {
+            <p class="warn">Not connected. Plug its output into another block, or into <strong>out</strong>, to use it.</p>
+          }
           @if (node.description) {
             <p class="description">{{ node.description }}</p>
           }
@@ -180,6 +248,15 @@
                   @if (input.chosen) {
                     <span class="chosen">Selected</span>
                   }
+                  @if (selectedPlugged().has(input.key)) {
+                    <button
+                      type="button"
+                      class="unplug"
+                      data-testid="unplug-input"
+                      [title]="'Unplug ' + input.key"
+                      (click)="unplugInput(input.key)"
+                    >Unplug</button>
+                  }
                 </span>
                 @if (input.result; as result) {
                   <div
@@ -225,6 +302,20 @@
   </aside>
 </div>
 <p class="version">v{{ version }}</p>
+@if (form(); as request) {
+  <app-block-form
+    [type]="request.type"
+    [value]="request.value"
+    [isRoot]="request.isRoot"
+    (save)="onFormSave($event)"
+    (cancel)="onFormCancel()"
+  />
+}
+@if (guide() === 'intro') {
+  <app-quick-guide (closed)="guide.set('closed')" (tour)="guide.set('tour')" />
+} @else if (guide() === 'tour') {
+  <app-guide-tour [steps]="guideSteps" (prepare)="onGuideStep($event)" (closed)="guide.set('closed')" />
+}
 @if (tooltip.current(); as tip) {
   <div
     class="tooltip"

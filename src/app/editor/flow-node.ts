@@ -6,6 +6,8 @@ import { NodePresentation } from '../transform/presentation';
 export interface NodeInputValue {
   key: string;
   text: string;
+  /** Nothing is plugged in; a block can still be connected here. */
+  open?: boolean;
 }
 
 /** A value drawn as a pill: a literal, or the whole transform's input or output. */

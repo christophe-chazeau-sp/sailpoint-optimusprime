@@ -9,7 +9,7 @@
     @if (data.inputValues.length) {
       <span class="inputs">
         @for (input of data.inputValues; track input.key) {
-          <span class="io-line" [title]="input.key + ' ' + input.text">
+          <span class="io-line" [class.open]="input.open" [title]="input.key + ' ' + input.text">
             <span class="io-name" [class.variable]="input.key.startsWith('$')">in {{ input.key }}</span> {{ input.text }}
           </span>
         }
@@ -26,6 +26,9 @@
     }
   </div>
   <span class="menu" aria-hidden="true">•••</span>
+  @if (data.model.floating) {
+    <span class="badge" data-testid="not-connected">Not connected</span>
+  }
   @if (data.model.usesVelocity && !data.capsule) {
     <span
       class="velocity"
@@ -53,6 +56,10 @@
   @for (anchor of inputAnchors(); track anchor.key + seed) {
     <div
       class="anchor left"
+      [class.reference]="anchor.reference"
+      [class.open]="anchor.open"
+      [attr.data-input]="anchor.key"
+      [title]="anchor.reference ? '' : anchor.open ? 'Drag from here, or drop a block output here' : 'Drag to move or unplug this input'"
       [style.top]="anchor.top"
       refComponent
       [data]="socketData('input', anchor.key, anchor.socket)"
@@ -61,7 +68,7 @@
   }
   @if (referenceSocket(); as socket) {
     <div
-      class="anchor left"
+      class="anchor left reference"
       style="top: 0"
       refComponent
       [data]="socketData('output', 'ref', socket)"
@@ -71,6 +78,8 @@
   @if (outputSocket(); as socket) {
     <div
       class="anchor right"
+      data-output="out"
+      title="Drag to an input to connect"
       refComponent
       [data]="socketData('output', 'out', socket)"
       [emit]="emit"

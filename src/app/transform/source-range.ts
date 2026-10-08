@@ -1,5 +1,6 @@
 import { findNodeAtLocation, parseTree } from 'jsonc-parser';
 import { JsonPath, TransformGraph } from './model/transform-graph';
+import { ROOT_TREE } from './workspace/workspace';
 
 export interface SourceRange {
   from: number;
@@ -18,7 +19,7 @@ export function sourceRanges(text: string, graph: TransformGraph): Map<string, S
     return ranges;
   }
   for (const node of graph.nodes) {
-    if (!node.path) {
+    if (!node.path || (node.tree && node.tree !== ROOT_TREE)) {
       continue;
     }
     const found = findNodeAtLocation(tree, node.path);

@@ -62,6 +62,10 @@
   background: #e8f2fc;
 }
 
+.canvas-tools .fill {
+  fill: currentColor;
+}
+
 :host ::ng-deep [data-testid='minimap'] {
   right: 16px;
   bottom: 16px;

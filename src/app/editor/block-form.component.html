@@ -1,0 +1,218 @@
+<div class="backdrop" (click)="cancel.emit()"></div>
+<form
+  class="dialog"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="block-form-title"
+  data-testid="block-form"
+  novalidate
+  (submit)="submit($event)"
+>
+  <header>
+    <h2 id="block-form-title">{{ title }}</h2>
+    @if (info?.operation.description; as description) {
+      <p class="description">{{ description }}</p>
+    }
+  </header>
+
+  <div class="body">
+    @if (isRoot) {
+      <label class="row" [class.invalid]="nameError">
+        <span class="label">Transform name <em>required</em></span>
+        <input
+          type="text"
+          spellcheck="false"
+          data-field="name"
+          [value]="name"
+          (input)="name = text($event)"
+        />
+        @if (nameError) {
+          <small class="error">{{ nameError }}</small>
+        }
+      </label>
+    }
+
+    @for (field of fields; track field.spec.key) {
+      @if (field.spec.kind === 'boolean') {
+        <label class="check">
+          <input
+            type="checkbox"
+            [attr.data-field]="field.spec.key"
+            [checked]="field.checked"
+            (change)="field.checked = $any($event.target).checked"
+          />
+          <span>{{ field.spec.label }}</span>
+        </label>
+      } @else {
+        <label class="row" [class.invalid]="field.error">
+          <span class="label">
+            {{ field.spec.label }}
+            @if (field.spec.required) {
+              <em>required</em>
+            }
+          </span>
+          @switch (field.spec.kind) {
+            @case ('textarea') {
+              <textarea
+                rows="3"
+                spellcheck="false"
+                [attr.data-field]="field.spec.key"
+                [placeholder]="field.spec.placeholder ?? ''"
+                [value]="field.text"
+                (input)="field.text = text($event)"
+              ></textarea>
+            }
+            @case ('json') {
+              <textarea
+                class="mono"
+                rows="6"
+                spellcheck="false"
+                [attr.data-field]="field.spec.key"
+                [placeholder]="field.spec.placeholder ?? ''"
+                [value]="field.text"
+                (input)="field.text = text($event)"
+              ></textarea>
+            }
+            @case ('select') {
+              <select [attr.data-field]="field.spec.key" [value]="field.text" (change)="field.text = text($event)">
+                @if (!field.spec.required) {
+                  <option value="">(not set)</option>
+                }
+                @for (option of field.spec.options ?? []; track option) {
+                  <option [value]="option" [selected]="option === field.text">{{ option }}</option>
+                }
+              </select>
+            }
+            @default {
+              <input
+                [type]="field.spec.kind === 'number' ? 'number' : 'text'"
+                spellcheck="false"
+                [attr.data-field]="field.spec.key"
+                [attr.list]="field.spec.suggestions ? 'suggest-' + field.spec.key : null"
+                [placeholder]="field.spec.placeholder ?? ''"
+                [value]="field.text"
+                (input)="field.text = text($event)"
+              />
+              @if (field.spec.suggestions; as suggestions) {
+                <datalist [id]="'suggest-' + field.spec.key">
+                  @for (suggestion of suggestions; track suggestion) {
+                    <option [value]="suggestion"></option>
+                  }
+                </datalist>
+              }
+            }
+          }
+          @if (field.error) {
+            <small class="error">{{ field.error }}</small>
+          } @else if (field.spec.help) {
+            <small class="help">{{ field.spec.help }}</small>
+          }
+        </label>
+      }
+    }
+
+    @for (slot of editableSlots; track slot.spec.key) {
+      <div class="row" [class.invalid]="slot.error">
+        <span class="label">
+          {{ slot.spec.key }}
+          @if (slot.spec.required) {
+            <em>required</em>
+          }
+        </span>
+        @if (slot.spec.multiple) {
+          @for (item of slot.items; track $index) {
+            <div class="item">
+              @if (item.kind === 'block') {
+                <span class="chip" title="Connected on the canvas; unplug it there">{{ item.label }} block</span>
+              } @else {
+                <input
+                  type="text"
+                  spellcheck="false"
+                  [attr.data-field]="slot.spec.key + '[' + $index + ']'"
+                  [value]="item.text"
+                  (input)="setLiteral(item, $event)"
+                />
+                <button type="button" class="icon" aria-label="Remove value" (click)="removeItem(slot, $index)">×</button>
+              }
+            </div>
+          }
+          <button type="button" class="link" [attr.data-add]="slot.spec.key" (click)="addItem(slot)">+ Add value</button>
+          <small class="help">You can also connect blocks to {{ slot.spec.key }} on the canvas.</small>
+        } @else if (slot.single.kind === 'block') {
+          <span class="chip" title="Connected on the canvas; unplug it there">{{ slot.single.label }} block</span>
+        } @else {
+          <input
+            type="text"
+            spellcheck="false"
+            [attr.data-field]="slot.spec.key"
+            [placeholder]="slot.spec.placeholder ?? ''"
+            [value]="slot.single.text"
+            (input)="setLiteral(slot.single, $event)"
+          />
+          <small class="help">A plain value, or connect a block to {{ slot.spec.key }} on the canvas.</small>
+        }
+        @if (slot.error) {
+          <small class="error">{{ slot.error }}</small>
+        }
+      </div>
+    }
+
+    @if (implicitSlot; as slot) {
+      <p class="note">
+        Connect a block to <code>{{ slot.key }}</code> on the canvas.
+        @if (slot.implicit) {
+          Left empty, the step reads the attribute the identity profile maps it to.
+        }
+      </p>
+    }
+
+    @if (info?.variables) {
+      <div class="row">
+        <span class="label">Variables</span>
+        @for (variable of variables; track $index) {
+          <div class="item variable" [class.invalid]="variable.error">
+            <input
+              type="text"
+              class="var-name"
+              spellcheck="false"
+              placeholder="name"
+              aria-label="Variable name"
+              [value]="variable.name"
+              (input)="variable.name = text($event)"
+            />
+            @if (variable.value.kind === 'block') {
+              <span class="chip">{{ variable.value.label }} block</span>
+            } @else {
+              <input
+                type="text"
+                spellcheck="false"
+                placeholder="value"
+                aria-label="Variable value"
+                [value]="variable.value.text"
+                (input)="setLiteral(variable.value, $event)"
+              />
+              <button type="button" class="icon" aria-label="Remove variable" (click)="removeVariable($index)">×</button>
+            }
+          </div>
+          @if (variable.error) {
+            <small class="error">{{ variable.error }}</small>
+          }
+        }
+        <button type="button" class="link" (click)="addVariable()">+ Add variable</button>
+        <small class="help">Templates in this step read them as $name. A variable can also take a block from the canvas.</small>
+      </div>
+    }
+
+    @if (!fields.length && !editableSlots.length && !info?.variables && !isRoot) {
+      <p class="note">This block has nothing to set up.</p>
+    }
+  </div>
+
+  <footer>
+    @if (formError) {
+      <span class="error" role="alert">{{ formError }}</span>
+    }
+    <button type="button" class="secondary" (click)="cancel.emit()">Cancel</button>
+    <button type="submit" class="primary" data-testid="block-form-submit">{{ value ? 'Save' : 'Add block' }}</button>
+  </footer>
+</form>

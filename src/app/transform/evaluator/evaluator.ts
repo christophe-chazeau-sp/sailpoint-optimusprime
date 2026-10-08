@@ -1,4 +1,4 @@
-import { lookupOperation } from '../catalog/operations';
+import { lookupOperation, usesImplicitInput } from '../catalog/operations';
 import { JsonPath } from '../model/transform-graph';
 import { pathKey } from '../source-range';
 import { applyDateMath, DateError, formatDate, javaIsoString, parseDate, parseIso } from './dates';
@@ -72,7 +72,7 @@ export function requiredInputs(document: unknown): RequiredInput[] {
     if (typeof value['type'] === 'string') {
       const type = value['type'];
       const attributes = isRecord(value['attributes']) ? value['attributes'] : {};
-      if (lookupOperation(type)?.consumesInput && !('input' in attributes) && !nowDateMath(type, attributes)) {
+      if (usesImplicitInput(type, attributes)) {
         found.set(IMPLICIT_KEY, {
           key: IMPLICIT_KEY,
           kind: 'implicit',
@@ -158,7 +158,7 @@ export function stepInputs(
     rows.push({ ...row, chosen: row.key === chosen });
   };
 
-  if (lookupOperation(type)?.consumesInput && !('input' in attributes) && !nowDateMath(type, attributes)) {
+  if (usesImplicitInput(type, attributes)) {
     rows.push({
       key: 'input',
       source: 'Implicit input',
@@ -614,10 +614,6 @@ class AttributeReader {
 
 function looksLikeTemplate(value: string): boolean {
   return /\$!?\{?[A-Za-z_]/.test(value) || /#\{?(?:set|if)\b/.test(value);
-}
-
-function nowDateMath(type: string, attributes: Record<string, unknown>): boolean {
-  return type === 'dateMath' && String(attributes['expression'] ?? '').trim().startsWith('now');
 }
 
 function mapText(value: Value, apply: (text: string) => Value): Value {

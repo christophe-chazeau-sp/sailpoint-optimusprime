@@ -298,11 +298,87 @@
   font-family: Inter, 'Segoe UI', system-ui, sans-serif;
 }
 
+/* A generous hit area centred on the edge; the dot inside shows where arrows plug in. */
 .anchor {
   position: absolute;
-  width: 2px;
-  height: 2px;
-  transform: translate(-50%, -50%);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  /* Margins, not a transform: Rete reads socket positions from offsetTop/offsetLeft. */
+  margin: -8px 0 0 -8px;
+  cursor: crosshair;
+}
+
+/* Size must match DOT_RADIUS in transform-connection.component.ts, where arrows stop. */
+.anchor::after {
+  content: '';
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #98a2b3;
+  border-radius: 50%;
+  background: #fff;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s;
+}
+
+.anchor.open::after,
+:host(.selected) .anchor::after,
+:host(:hover) .anchor::after {
+  border-color: #4c6ef5;
+}
+
+.anchor:hover::after {
+  background: #4c6ef5;
+}
+
+/* On a selected box the dots sit on the 6px selection ring instead of the card border. */
+:host(.selected) .left {
+  left: -6px;
+}
+
+:host(.selected) .right {
+  left: calc(100% + 6px);
+}
+
+.anchor.reference {
+  pointer-events: none;
+}
+
+.anchor.reference::after {
+  display: none;
+}
+
+.io-line.open {
+  color: #98a2b3;
+  font-style: italic;
+}
+
+.io-line.open .io-name {
+  color: #98a2b3;
+}
+
+.badge {
+  position: absolute;
+  top: -10px;
+  left: 10px;
+  padding: 0 7px;
+  border: 1px solid #fedf89;
+  border-radius: 9px;
+  background: #fffaeb;
+  color: #b54708;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+:host(.detached) .card {
+  border-style: dashed;
+  border-color: #c5ced9;
 }
 
 .left {

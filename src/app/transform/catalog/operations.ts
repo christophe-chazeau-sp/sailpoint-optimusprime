@@ -229,3 +229,12 @@ const BY_TYPE = new Map(OPERATIONS.map((operation) => [operation.type, operation
 export function lookupOperation(type: string): OperationInfo | undefined {
   return BY_TYPE.get(type);
 }
+
+/** True when the block reads the implicit input: it consumes input, names none, and needs one. */
+export function usesImplicitInput(type: string, attributes: Record<string, unknown>): boolean {
+  if (!lookupOperation(type)?.consumesInput || Object.prototype.hasOwnProperty.call(attributes, 'input')) {
+    return false;
+  }
+  // A dateMath expression starting with "now" computes from the current time, not the input.
+  return !(type === 'dateMath' && String(attributes['expression'] ?? '').trim().startsWith('now'));
+}

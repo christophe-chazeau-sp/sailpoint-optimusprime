@@ -3,7 +3,7 @@ import { ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
 @Component({
   selector: 'app-anchor-socket',
   template: '',
-  styles: [':host { display: block; width: 2px; height: 2px; }'],
+  styles: [':host { position: absolute; display: block; width: 2px; height: 2px; pointer-events: none; }'],
 })
 export class AnchorSocketComponent implements OnChanges {
   @Input() data: unknown;

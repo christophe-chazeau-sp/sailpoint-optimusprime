@@ -1,59 +1,84 @@
 <section class="tenant" aria-label="Tenant">
-  <div class="mode" role="group" aria-label="Authentication">
-    <button type="button" [class.on]="mode() === 'jwt'" (click)="setMode('jwt')">JWT token</button>
-    <button type="button" [class.on]="mode() === 'client'" (click)="setMode('client')">Client ID and secret</button>
-  </div>
-
-  <label class="field">
-    <span>Tenant</span>
-    <input
-      type="text"
-      spellcheck="false"
-      autocomplete="off"
-      placeholder="acme or https://acme.identitynow.com"
-      [value]="tenant()"
-      (input)="onTenant($event)"
-    />
-  </label>
-
-  @if (mode() === 'jwt') {
-    <label class="field">
-      <span>JWT token</span>
-      <input
-        type="password"
-        spellcheck="false"
-        autocomplete="off"
-        placeholder="Access token"
-        [value]="token()"
-        (input)="onToken($event)"
-      />
-    </label>
+  @if (connectedTo(); as host) {
+    <div
+      class="connected"
+      [class.soon]="expiry() === 'soon'"
+      [class.expired]="expiry() === 'expired'"
+      role="status"
+      data-testid="tenant-connected"
+    >
+      <span class="dot" aria-hidden="true"></span>
+      <div class="connected-text">
+        <strong>{{ expiry() === 'expired' ? 'Token expired' : 'Connected' }}</strong>
+        <small [title]="host">{{ host }}</small>
+        @if (expiry() === 'expired') {
+          <small>Sign in again to keep using the tenant.</small>
+        } @else if (expiry()) {
+          <small data-testid="token-countdown">Token expires in <b>{{ remainingText() }}</b></small>
+        }
+      </div>
+      <button type="button" class="link" data-testid="tenant-disconnect" (click)="disconnect()">
+        {{ expiry() === 'expired' ? 'Sign in' : 'Disconnect' }}
+      </button>
+    </div>
   } @else {
+    <div class="mode" role="group" aria-label="Authentication">
+      <button type="button" [class.on]="mode() === 'jwt'" (click)="setMode('jwt')">JWT token</button>
+      <button type="button" [class.on]="mode() === 'client'" (click)="setMode('client')">Client ID and secret</button>
+    </div>
+
     <label class="field">
-      <span>Client ID</span>
+      <span>Tenant</span>
       <input
         type="text"
         spellcheck="false"
         autocomplete="off"
-        [value]="clientId()"
-        (input)="onClientId($event)"
+        placeholder="acme or https://acme.identitynow.com"
+        [value]="tenant()"
+        (input)="onTenant($event)"
       />
     </label>
-    <label class="field">
-      <span>Client secret</span>
-      <input
-        type="password"
-        spellcheck="false"
-        autocomplete="off"
-        [value]="clientSecret()"
-        (input)="onClientSecret($event)"
-      />
-    </label>
+
+    @if (mode() === 'jwt') {
+      <label class="field">
+        <span>JWT token</span>
+        <input
+          type="password"
+          spellcheck="false"
+          autocomplete="off"
+          placeholder="Access token"
+          [value]="token()"
+          (input)="onToken($event)"
+        />
+      </label>
+    } @else {
+      <label class="field">
+        <span>Client ID</span>
+        <input
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          [value]="clientId()"
+          (input)="onClientId($event)"
+        />
+      </label>
+      <label class="field">
+        <span>Client secret</span>
+        <input
+          type="password"
+          spellcheck="false"
+          autocomplete="off"
+          [value]="clientSecret()"
+          (input)="onClientSecret($event)"
+        />
+      </label>
+    }
+
+    <button type="button" class="load" [disabled]="busy()" (click)="loadList()">
+      {{ busy() ? 'Connecting…' : 'Connect and load transforms' }}
+    </button>
   }
 
-  <button type="button" class="load" [disabled]="busy()" (click)="loadList()">
-    {{ busy() ? 'Loading…' : 'Load transforms' }}
-  </button>
   @if (status()) {
     <p class="hint">{{ status() }}</p>
   }
@@ -61,22 +86,41 @@
     <p class="error" role="alert">{{ message }}</p>
   }
 
-  @if (transforms().length) {
-    <label class="field">
-      <span>Transform</span>
+  @if (connectedTo() && transforms().length) {
+    <div class="field">
+      <span>Transforms <small class="count">{{ filtered().length }} of {{ transforms().length }}</small></span>
       <input
         type="search"
         spellcheck="false"
-        placeholder="Filter by name"
-        [value]="filter()"
-        (input)="onFilter($event)"
+        autocomplete="off"
+        placeholder="Search transform names"
+        aria-label="Search transform names"
+        data-testid="transform-search"
+        [value]="search()"
+        (input)="onSearch($event)"
       />
-      <select [value]="selectedId()" (change)="onPick($event)">
-        <option value="">Select a transform</option>
+      <ul class="results" data-testid="transform-results">
         @for (item of filtered(); track item.id) {
-          <option [value]="item.id">{{ item.name }}{{ item.type ? ' · ' + item.type : '' }}</option>
+          <li>
+            <button
+              type="button"
+              [class.on]="item.id === selectedId()"
+              [attr.aria-pressed]="item.id === selectedId()"
+              [title]="item.name"
+              (click)="pick(item)"
+            >
+              <span class="name">{{ item.name }}</span>
+              @if (item.type) {
+                <small>{{ item.type }}</small>
+              }
+            </button>
+          </li>
+        } @empty {
+          <li class="hint none">No transform name contains “{{ search().trim() }}”.</li>
         }
-      </select>
-    </label>
+      </ul>
+    </div>
+  } @else if (connectedTo() && !busy()) {
+    <p class="hint">This tenant has no transforms.</p>
   }
 </section>
