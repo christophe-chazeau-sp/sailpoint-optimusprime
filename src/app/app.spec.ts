@@ -1,6 +1,14 @@
 import { TestBed } from '@angular/core/testing';
-import { App, BLANK_EXAMPLE_ID, LEFT_PANE_OPEN_KEY, LEFT_PANE_WIDTH_KEY, PALETTE_OPEN_KEY } from './app';
+import {
+  App,
+  BLANK_EXAMPLE_ID,
+  LEFT_PANE_OPEN_KEY,
+  LEFT_PANE_WIDTH_KEY,
+  PALETTE_OPEN_KEY,
+  SOURCE_FOLDED_KEY,
+} from './app';
 import { PALETTE_COLLAPSED_KEY } from './editor/block-palette.component';
+import { EXPLAIN_OPEN_KEY } from './inspector/explanation-card.component';
 
 describe('App', () => {
   beforeAll(() => {
@@ -15,6 +23,8 @@ describe('App', () => {
       localStorage.removeItem(LEFT_PANE_OPEN_KEY);
       localStorage.removeItem(PALETTE_OPEN_KEY);
       localStorage.removeItem(PALETTE_COLLAPSED_KEY);
+      localStorage.removeItem(SOURCE_FOLDED_KEY);
+      localStorage.removeItem(EXPLAIN_OPEN_KEY);
     } catch {
       // Storage can be unavailable in some test environments.
     }
@@ -61,6 +71,88 @@ describe('App', () => {
     fixture.detectChanges();
     expect(pane.classList.contains('collapsed')).toBe(true);
     expect(pane.querySelector('app-json-editor')).toBeNull();
+  });
+
+  it('should explain the transform and the selected step in plain English', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    const summary = () => element.querySelector('[data-testid="explain-summary"]');
+    expect(summary()?.textContent).toContain('“Lowercase display” returns');
+    expect(summary()?.textContent).toContain('in lowercase');
+    expect(summary()?.querySelector('.chip')?.textContent).toBe('Bar');
+    expect(element.querySelector('[data-testid="step-explanation"]')?.textContent).toContain(
+      'Returns the Concatenation result in lowercase.',
+    );
+
+    (element.querySelector('[data-testid="explain-toggle"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(summary()).toBeNull();
+    expect(localStorage.getItem(EXPLAIN_OPEN_KEY)).toBe('0');
+  });
+
+  it('should flag input values that are still empty', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('[data-testid="missing-badge"]')).toBeNull();
+
+    (element.querySelector('[data-example="implicit-lower"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(element.querySelector('[data-testid="missing-badge"]')?.textContent).toContain('1 without a value');
+    expect(element.querySelector('app-test-values .missing')).not.toBeNull();
+    expect(element.querySelector('[data-testid="tab-values"] .badge.alert')?.textContent).toContain('1 / 1');
+
+    const field = element.querySelector('[data-input]') as HTMLInputElement;
+    field.value = 'JOHN';
+    field.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(element.querySelector('[data-testid="missing-badge"]')).toBeNull();
+    expect(element.querySelector('app-test-values .missing')).toBeNull();
+  });
+
+  it('should lay the source pane out in numbered sections with tabs', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    const section = (name: string) => element.querySelector(`[data-section="${name}"]`) as HTMLElement;
+    const visible = (selector: string) => {
+      const found = element.querySelector(selector);
+      return !!found && !found.closest('[hidden]');
+    };
+
+    expect(element.querySelector('[data-testid="tenant-strip"]')?.textContent).toContain('Not connected');
+    expect(visible('[data-testid="examples"]')).toBe(true);
+    expect(visible('input[type="file"]')).toBe(false);
+
+    const tab = (container: HTMLElement, label: string) =>
+      [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((button) =>
+        button.textContent?.includes(label),
+      )!;
+    tab(section('open'), 'File').click();
+    fixture.detectChanges();
+    expect(visible('input[type="file"]')).toBe(true);
+    expect(visible('[data-testid="examples"]')).toBe(false);
+
+    tab(section('open'), 'Tenant').click();
+    fixture.detectChanges();
+    (element.querySelector('[data-testid="open-sign-in"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(element.querySelector('[data-testid="tenant-sign-in"]')).not.toBeNull();
+
+    tab(section('test'), 'Identity').click();
+    fixture.detectChanges();
+    expect(visible('[data-testid="identity-preview"]')).toBe(true);
+    expect(visible('[data-input]')).toBe(false);
+
+    (section('json').querySelector('.head') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(visible('[data-section="json"] app-json-editor')).toBe(false);
+    expect(section('json').classList.contains('folded')).toBe(true);
+    expect(JSON.parse(localStorage.getItem(SOURCE_FOLDED_KEY) ?? '[]')).toEqual(['json']);
   });
 
   it('should start with the blocks pane folded, then list folded sections', async () => {
@@ -135,7 +227,7 @@ describe('App', () => {
     expect(card()?.textContent).toContain('Source pane');
 
     const next = () => (element.querySelector('[data-testid="tour-next"]') as HTMLButtonElement).click();
-    for (let step = 0; step < 6; step++) next();
+    for (let step = 0; step < 5; step++) next();
     fixture.detectChanges();
     expect(card()?.textContent).toContain('Blocks');
     expect(element.querySelector('app-block-palette')).not.toBeNull();
@@ -151,9 +243,7 @@ describe('App', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     const element = fixture.nativeElement as HTMLElement;
-    const select = element.querySelector('.source select') as HTMLSelectElement;
-    select.value = BLANK_EXAMPLE_ID;
-    select.dispatchEvent(new Event('change'));
+    (element.querySelector(`[data-example="${BLANK_EXAMPLE_ID}"]`) as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(element.querySelector('[data-testid="result"]')?.textContent).toContain('No block is connected');
     (element.querySelector('[data-testid="palette-expand-all"]') as HTMLButtonElement).click();

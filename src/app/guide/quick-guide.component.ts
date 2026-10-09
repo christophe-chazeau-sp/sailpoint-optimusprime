@@ -15,7 +15,7 @@ import { Component, output } from '@angular/core';
       <ol class="steps">
         <li>
           <strong>Open a transform</strong>
-          <span>Pick an example, paste or drop JSON in the left pane, or connect to a tenant and search its transforms.</span>
+          <span>In the left pane, <b>1 · Open a transform</b> from your tenant, an example or a file, or paste JSON in <b>2 · JSON document</b>.</span>
         </li>
         <li>
           <strong>Read the diagram</strong>
@@ -27,7 +27,7 @@ import { Component, output } from '@angular/core';
         </li>
         <li>
           <strong>Test</strong>
-          <span>Fill the test values, or preview with a real identity of your tenant and compare with <b>Run on tenant</b>.</span>
+          <span>In <b>3 · Test</b>, fill the values, or pick a real identity of your tenant and compare with <b>Run on tenant</b>.</span>
         </li>
         <li>
           <strong>Check Velocity on the tenant</strong>

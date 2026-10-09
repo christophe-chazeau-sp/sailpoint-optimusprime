@@ -25,22 +25,32 @@ npx ng test --watch=false
 
 ## Features
 
-### Open a transform
+### The source pane
 
-- Pick one of the built-in examples, or **New empty transform** to start from a blank canvas.
-- Paste or type JSON in the **JSON document** editor, choose a `.json` file, or drop one on the pane.
-- Load a transform from a tenant (see below).
+The left pane has the tenant status at the top, then three numbered sections. Each section folds by its title, and the app remembers which ones are folded.
+
+1. **Open a transform**, with three tabs:
+   - **Tenant:** search the connected tenant's transforms. This tab opens on its own when you connect.
+   - **Examples:** the built-in examples, and **New empty transform** to start from a blank canvas.
+   - **File:** choose a `.json` file, or drop one.
+2. **JSON document:** the transform itself. Paste or type JSON here. When this section is folded and the JSON is invalid, its title says so.
+3. **Test**, with two tabs:
+   - **Values:** the values the transform reads (see [Test values](#test-values-and-local-evaluation)).
+   - **Identity:** preview with a real identity of the tenant (see [Preview](#preview-with-a-tenant-identity)).
+
+### JSON and diagram
 
 The diagram follows the JSON as you type. When the JSON is invalid, the last valid diagram stays and the editor marks the error. Clicking in the JSON selects the matching step, and selecting a step highlights its JSON.
 
 ### Connect to a tenant
 
+- The strip under the title always shows whether you are connected. Click **Connect** to open the sign-in form.
 - Sign in with a **JWT access token**, or with a **client ID and secret**.
 - The tenant can be a name (`acme`), a UI address (`acme.identitynow.com`), or an API address (`acme.api.identitynow.com`). Demo and preprod domains (`identitynow-demo.com`, `identitynow-preprod.com`) work too. The API host is filled in when it is missing.
-- When connected, a green banner shows the tenant, with a **Disconnect** link.
-- With a JWT, the banner counts down to the token's expiry. It turns amber in the last two minutes and red once the token has expired.
+- When connected, the strip turns green and shows the tenant, with a **Disconnect** link.
+- With a JWT, the strip counts down to the token's expiry. It turns amber in the last two minutes and red once the token has expired.
 - A JWT issued by another tenant, or one that has already expired, is refused before any call, with a message saying why.
-- Search the tenant's transforms by any part of their name, and click one to load it.
+- In **Open a transform › Tenant**, search the tenant's transforms by any part of their name, and click one to load it.
 
 The token and the secret stay in memory only. The tenant address and the sign-in method are remembered in the browser.
 
@@ -54,10 +64,22 @@ The token and the secret stay in memory only. The tenant address and the sign-in
 - Drag boxes around. The diagram buttons reset the layout, the zoom, or both. The minimap button shows an overview of large transforms.
 - The left pane can be resized (double-click the splitter to reset it). Each side pane can be folded, and the app remembers your choice.
 
+### Plain-English explanation
+
+Under **Transform output**, the **What it does** card reads the whole transform as one sentence. For example: "Returns 'terminated' if `endDate` is on or before now; otherwise 'active' if `startDate` is on or before now; otherwise 'preHire' if `startDate` is after now; otherwise 'active'."
+
+- Nested conditionals and date comparisons are read as one chain of "otherwise ... if ..." clauses.
+- Conditional variables and steps nested too deeply to read inline are explained in "Where ..." lines under the sentence.
+- Known pitfalls show as warnings, such as `#set($x = null)$x`, which fails on the tenant, and Velocity templates in general.
+- Names of attributes, sources and patterns are shown as chips. The card folds, and the app remembers whether it is open.
+
+The explanation is built from rules, without AI, so it works offline and gives the same answer every time. It says what the transform literally does, not why.
+
 ### Inspect a step
 
 Select a step to see, in the right pane:
 
+- **In plain English:** one line saying what the step does, such as "Returns the identity's `email` in lowercase."
 - Its name, type, description and output.
 - The variables it declares, with their values.
 - Every input with its value. The input the step actually used is highlighted, for example the branch a conditional took, or the lookup entry it matched.
@@ -79,14 +101,14 @@ Every edit updates the JSON document and keeps its formatting. Boxes keep their 
 
 ### Test values and local evaluation
 
-The **Test values** section lists everything the transform reads: the implicit input, account attributes (by source) and identity attributes. Type a value in each field, or leave it blank for null. The diagram, the right pane and the transform output update as you type.
+The **Values** tab of **Test** lists everything the transform reads: the implicit input, account attributes (by source) and identity attributes. Type a value in each field, or leave it blank for null. Blank fields have a light red background and a "no value" tag, and the **Test** title shows how many are still blank. The diagram, the right pane and the transform output update as you type.
 
 ### Preview with a tenant identity
 
-When connected to a tenant, **Preview with an identity** in the left pane:
+When connected to a tenant, the **Identity** tab of **Test**:
 
 1. **Find an identity** by name or email. The exact text is searched first. If nothing matches, each word is searched as the start of a name or email.
-2. **Fill the test values.** The identity's attributes and accounts fill the test values. Any field you edit overrides the identity's value, and picking another identity resets them.
+2. **Fill the test values.** The identity's attributes and accounts fill the **Values** tab, which says which identity filled it. Any field you edit overrides the identity's value, and picking another identity resets them.
 3. **Choose the implicit input.** If the transform uses one, pick a source and one of the identity's account attributes, as in an identity profile mapping.
 4. **Run on tenant.** ISC calculates the transform for this identity. The app shows ISC's output or error, and whether it matches the local result.
 
@@ -176,7 +198,7 @@ When it matters, compare with **Run on tenant**.
 
 ### Credentials
 
-- JWT access tokens expire after a few minutes. Paste a new one when the banner turns red.
+- JWT access tokens expire after a few minutes. Paste a new one when the tenant strip turns red.
 - Tokens and secrets are never written to disk or to browser storage. Only the tenant address is remembered.
 
 ## Version

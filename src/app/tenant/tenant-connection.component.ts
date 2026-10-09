@@ -1,12 +1,5 @@
-import { Component, computed, DestroyRef, inject, output, signal } from '@angular/core';
-import {
-  accessToken,
-  bearerToken,
-  browserTransport,
-  listTransforms,
-  ListedTransform,
-  tokenClaims,
-} from './isc-client';
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { accessToken, bearerToken, browserTransport, listTransforms, tokenClaims } from './isc-client';
 import { resolveTenant } from './tenant-address';
 import { TenantSession } from './tenant-session';
 
@@ -42,51 +35,39 @@ function countdown(ms: number): string {
   return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
 }
 
+/** The tenant status strip under the title, and the sign-in form it opens. */
 @Component({
-  selector: 'app-tenant-browser',
-  templateUrl: './tenant-browser.component.html',
-  styleUrl: './tenant-browser.component.scss',
+  selector: 'app-tenant-connection',
+  templateUrl: './tenant-connection.component.html',
+  styleUrl: './tenant-connection.component.scss',
 })
-export class TenantBrowserComponent {
-  readonly loaded = output<string>();
-  private readonly session = inject(TenantSession);
+export class TenantConnectionComponent {
+  protected readonly session = inject(TenantSession);
 
   protected readonly mode = signal<AuthMode>(stored(MODE_KEY) === 'client' ? 'client' : 'jwt');
   protected readonly tenant = signal(stored(TENANT_KEY));
   protected readonly token = signal('');
   protected readonly clientId = signal('');
   protected readonly clientSecret = signal('');
-  protected readonly search = signal('');
   protected readonly busy = signal(false);
-  protected readonly status = signal('');
   protected readonly error = signal<string | null>(null);
-  protected readonly transforms = signal<ListedTransform[]>([]);
-  protected readonly selectedId = signal('');
-  protected readonly filtered = computed(() => {
-    const query = this.search().trim().toLowerCase();
-    const items = this.transforms();
-    return query ? items.filter((item) => item.name.toLowerCase().includes(query)) : items;
-  });
 
-  /** Host of the connected tenant, shown in the banner. */
+  /** Host of the connected tenant, shown in the strip. */
   protected readonly connectedTo = computed(() => {
     const connection = this.session.connection();
     return connection ? new URL(connection.apiBase).hostname.replace('.api.', '.') : null;
   });
-  /** When the signed-in JWT expires; null for client credentials, which sign in again on reload. */
+  /** When the signed-in JWT expires; null for client credentials. */
   private readonly expiresAt = signal<number | null>(null);
   private readonly now = signal(Date.now());
-  protected readonly remaining = computed(() => {
-    const expiresAt = this.expiresAt();
-    return expiresAt === null ? null : expiresAt - this.now();
-  });
   protected readonly remainingText = computed(() => {
-    const remaining = this.remaining();
-    return remaining === null ? '' : countdown(remaining);
+    const expiresAt = this.expiresAt();
+    return expiresAt === null ? '' : countdown(expiresAt - this.now());
   });
   protected readonly expiry = computed<'ok' | 'soon' | 'expired' | null>(() => {
-    const remaining = this.remaining();
-    if (remaining === null) return null;
+    const expiresAt = this.expiresAt();
+    if (expiresAt === null) return null;
+    const remaining = expiresAt - this.now();
     if (remaining <= 0) return 'expired';
     return remaining < EXPIRY_WARNING_MS ? 'soon' : 'ok';
   });
@@ -117,11 +98,12 @@ export class TenantBrowserComponent {
     this.clientSecret.set((event.target as HTMLInputElement).value);
   }
 
-  protected onSearch(event: Event): void {
-    this.search.set((event.target as HTMLInputElement).value);
+  protected toggleForm(): void {
+    this.session.signInOpen.update((open) => !open);
+    this.error.set(null);
   }
 
-  protected async loadList(): Promise<void> {
+  protected async connect(): Promise<void> {
     const resolved = resolveTenant(this.tenant());
     if ('error' in resolved) {
       this.error.set(resolved.error);
@@ -149,43 +131,33 @@ export class TenantBrowserComponent {
 
     this.busy.set(true);
     this.error.set(null);
-    this.status.set(mode === 'client' ? 'Signing in…' : 'Loading transforms…');
-    this.transforms.set([]);
-    this.selectedId.set('');
     try {
       const transport = browserTransport();
       const access =
         mode === 'jwt'
           ? token
           : await accessToken(resolved.apiBase, this.clientId().trim(), this.clientSecret().trim(), transport);
-      this.status.set('Loading transforms…');
       const listed = await listTransforms(resolved.apiBase, access, transport);
+      this.session.transforms.set(listed);
       this.session.connection.set({ apiBase: resolved.apiBase, token: access });
+      this.session.signInOpen.set(false);
       this.expiresAt.set(claims?.expiresAt ?? null);
-      this.transforms.set(listed);
-      this.status.set('');
       remember(TENANT_KEY, this.tenant().trim());
     } catch (error) {
-      this.status.set('');
       this.error.set(error instanceof Error ? error.message : 'The tenant could not be reached.');
     } finally {
       this.busy.set(false);
     }
   }
 
-  protected disconnect(): void {
+  /** After an expiry, signing in again starts from the form with the tenant kept. */
+  protected disconnect(reopen = false): void {
     this.session.connection.set(null);
+    this.session.transforms.set([]);
+    this.session.signInOpen.set(reopen);
     this.expiresAt.set(null);
-    this.transforms.set([]);
-    this.selectedId.set('');
-    this.search.set('');
     this.token.set('');
     this.clientSecret.set('');
     this.error.set(null);
-  }
-
-  protected pick(item: ListedTransform): void {
-    this.selectedId.set(item.id);
-    this.loaded.emit(JSON.stringify(item.document, null, 2));
   }
 }

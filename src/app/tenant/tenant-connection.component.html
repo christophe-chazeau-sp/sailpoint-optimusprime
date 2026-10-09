@@ -1,0 +1,122 @@
+<div class="tenant-strip" data-testid="tenant-strip">
+  @if (connectedTo(); as host) {
+    <div
+      class="status connected"
+      [class.soon]="expiry() === 'soon'"
+      [class.expired]="expiry() === 'expired'"
+      role="status"
+      data-testid="tenant-connected"
+    >
+      <span class="dot" aria-hidden="true"></span>
+      <div class="status-text">
+        <strong>{{ expiry() === 'expired' ? 'Token expired' : 'Connected' }}</strong>
+        <small [title]="host">{{ host }}</small>
+      </div>
+      @if (expiry() && expiry() !== 'expired') {
+        <span
+          class="countdown"
+          title="Time left before the JWT expires"
+          data-testid="token-countdown"
+        >
+          {{ remainingText() }}
+        </span>
+      }
+      <button
+        type="button"
+        class="link"
+        data-testid="tenant-disconnect"
+        (click)="disconnect(expiry() === 'expired')"
+      >
+        {{ expiry() === 'expired' ? 'Sign in' : 'Disconnect' }}
+      </button>
+    </div>
+  } @else {
+    <div class="status idle">
+      <span class="dot" aria-hidden="true"></span>
+      <div class="status-text">
+        <strong>Not connected</strong>
+        <small>Connect to load transforms and preview with identities.</small>
+      </div>
+      <button
+        type="button"
+        class="link"
+        data-testid="tenant-connect-toggle"
+        [attr.aria-expanded]="session.signInOpen()"
+        (click)="toggleForm()"
+      >
+        {{ session.signInOpen() ? 'Cancel' : 'Connect' }}
+      </button>
+    </div>
+
+    @if (session.signInOpen()) {
+      <form
+        class="sign-in"
+        data-testid="tenant-sign-in"
+        (submit)="$event.preventDefault(); connect()"
+      >
+        <div class="mode" role="group" aria-label="Authentication">
+          <button type="button" [class.on]="mode() === 'jwt'" (click)="setMode('jwt')">
+            JWT token
+          </button>
+          <button type="button" [class.on]="mode() === 'client'" (click)="setMode('client')">
+            Client ID and secret
+          </button>
+        </div>
+
+        <label class="field">
+          <span>Tenant</span>
+          <input
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="acme or https://acme.identitynow.com"
+            [value]="tenant()"
+            (input)="onTenant($event)"
+          />
+        </label>
+
+        @if (mode() === 'jwt') {
+          <label class="field">
+            <span>JWT token</span>
+            <input
+              type="password"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="Access token"
+              [value]="token()"
+              (input)="onToken($event)"
+            />
+          </label>
+        } @else {
+          <label class="field">
+            <span>Client ID</span>
+            <input
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              [value]="clientId()"
+              (input)="onClientId($event)"
+            />
+          </label>
+          <label class="field">
+            <span>Client secret</span>
+            <input
+              type="password"
+              spellcheck="false"
+              autocomplete="off"
+              [value]="clientSecret()"
+              (input)="onClientSecret($event)"
+            />
+          </label>
+        }
+
+        <button type="submit" class="load" data-testid="tenant-connect" [disabled]="busy()">
+          {{ busy() ? 'Connecting…' : 'Connect' }}
+        </button>
+        @if (error(); as message) {
+          <p class="error" role="alert">{{ message }}</p>
+        }
+      </form>
+    }
+  }
+</div>

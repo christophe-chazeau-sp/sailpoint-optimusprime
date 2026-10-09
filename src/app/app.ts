@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { BlockFormComponent } from './editor/block-form.component';
 import { BlockPaletteComponent } from './editor/block-palette.component';
 import { JsonEditorComponent } from './editor/json-editor.component';
@@ -16,7 +16,9 @@ import { GuideStep, GUIDE_STEPS } from './guide/guide-steps';
 import { GuideTourComponent } from './guide/guide-tour.component';
 import { QuickGuideComponent } from './guide/quick-guide.component';
 import { IdentityPreviewComponent, PreviewContext } from './tenant/identity-preview.component';
-import { TenantBrowserComponent } from './tenant/tenant-browser.component';
+import { TenantConnectionComponent } from './tenant/tenant-connection.component';
+import { TenantSession } from './tenant/tenant-session';
+import { TenantTransformsComponent } from './tenant/tenant-transforms.component';
 import { blockInfo } from './transform/catalog/blocks';
 import {
   accountKey,
@@ -25,12 +27,20 @@ import {
   evaluateTransform,
   formatValue,
   IMPLICIT_KEY,
+  inputId,
   RequiredInput,
   requiredInputs,
   StepResult,
   stepInputs,
 } from './transform/evaluator/evaluator';
-import { DEFAULT_EXAMPLE_ID, exampleText, TRANSFORM_EXAMPLES } from './transform/examples';
+import { DEFAULT_EXAMPLE_ID, exampleText } from './transform/examples';
+import { Explanation, explainTransform } from './transform/explain/explain';
+import { ExplainTextComponent } from './inspector/explain-text.component';
+import { ExplanationCardComponent } from './inspector/explanation-card.component';
+import { ExampleListComponent } from './source/example-list.component';
+import { SourceSectionComponent } from './source/source-section.component';
+import { Tab, TabBarComponent } from './source/tab-bar.component';
+import { TestValueChange, TestValuesComponent } from './source/test-values.component';
 import { TransformGraph, TransformNodeModel } from './transform/model/transform-graph';
 import { graphNode, parseWorkspace } from './transform/parser/transform-parser';
 import { presentNode } from './transform/presentation';
@@ -66,6 +76,12 @@ export const BLANK_EXAMPLE_ID = 'blank';
 export const LEFT_PANE_WIDTH_KEY = 'sailpoint.optimusprime.leftWidth';
 export const LEFT_PANE_OPEN_KEY = 'sailpoint.optimusprime.leftOpen';
 export const PALETTE_OPEN_KEY = 'sailpoint.optimusprime.paletteOpen';
+export const SOURCE_FOLDED_KEY = 'sailpoint.optimusprime.sourceFolded';
+/** The numbered sections of the source pane. */
+export type SourceSection = 'open' | 'json' | 'test';
+const SOURCE_SECTIONS: SourceSection[] = ['open', 'json', 'test'];
+type OpenTab = 'tenant' | 'examples' | 'file';
+type TestTab = 'values' | 'identity';
 
 function storageGet(key: string): string | null {
   try {
@@ -102,13 +118,20 @@ function storedLeftWidth(): number {
   return clampLeftWidth(Number.isFinite(parsed) ? parsed : DEFAULT_LEFT_WIDTH);
 }
 
-function inputId(input: Pick<RequiredInput, 'kind' | 'key'>): string {
-  return `${input.kind}:${input.key}`;
-}
-
 function storedOpen(key: string, fallback = true): boolean {
   const raw = storageGet(key);
   return raw == null ? fallback : raw === '1';
+}
+
+function storedFolded(): Set<SourceSection> {
+  try {
+    const parsed: unknown = JSON.parse(storageGet(SOURCE_FOLDED_KEY) ?? '[]');
+    return new Set(
+      Array.isArray(parsed) ? SOURCE_SECTIONS.filter((section) => parsed.includes(section)) : [],
+    );
+  } catch {
+    return new Set();
+  }
 }
 
 /** Where a canvas input key such as `values[1]`, `values[+]` or `implicit` lands in the block. */
@@ -144,7 +167,14 @@ interface FormRequest {
   imports: [
     TransformCanvasComponent,
     JsonEditorComponent,
-    TenantBrowserComponent,
+    TenantConnectionComponent,
+    TenantTransformsComponent,
+    SourceSectionComponent,
+    TabBarComponent,
+    ExampleListComponent,
+    TestValuesComponent,
+    ExplanationCardComponent,
+    ExplainTextComponent,
     IdentityPreviewComponent,
     QuickGuideComponent,
     GuideTourComponent,
@@ -160,7 +190,8 @@ export class App {
 
   protected readonly version = APP_VERSION;
   protected readonly tooltip = inject(TooltipService);
-  protected readonly examples = TRANSFORM_EXAMPLES;
+  private readonly session = inject(TenantSession);
+  protected readonly connected = computed(() => this.session.connection() !== null);
   protected readonly blankExampleId = BLANK_EXAMPLE_ID;
   protected readonly exampleId = signal(DEFAULT_EXAMPLE_ID);
   protected readonly errorMessage = signal<string | null>(null);
@@ -215,7 +246,7 @@ export class App {
     }
     return values;
   });
-  private readonly effectiveValues = computed(() => ({ ...this.previewValues(), ...this.testValues() }));
+  protected readonly effectiveValues = computed(() => ({ ...this.previewValues(), ...this.testValues() }));
   protected readonly connectedDocument = computed(() => {
     const document = this.document();
     return isTransform(document) ? document : null;
@@ -231,6 +262,11 @@ export class App {
     }
     const order: RequiredInput['kind'][] = ['implicit', 'account', 'identity'];
     return [...found.values()].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+  });
+  /** Inputs left blank, which the transform reads as null. */
+  protected readonly missingCount = computed(() => {
+    const values = this.effectiveValues();
+    return this.requirements().filter((input) => !values[inputId(input)]).length;
   });
   private readonly inputs = computed<EvaluationInputs>(() => {
     const values = this.effectiveValues();
@@ -297,6 +333,24 @@ export class App {
     }
     return stepInputs(treeValue(this.workspace(), tree), node.path, evaluation, this.inputs().implicitInput);
   });
+  /** One explanation per tree, like the evaluations. */
+  private readonly explanations = computed(() => {
+    const workspace = this.workspace();
+    const explanations = new Map<string, Explanation>();
+    if (workspace.document) {
+      explanations.set(ROOT_TREE, explainTransform(workspace.document));
+    }
+    for (const block of workspace.floating) {
+      explanations.set(block.id, explainTransform(block.value));
+    }
+    return explanations;
+  });
+  protected readonly explanation = computed(() => this.explanations().get(ROOT_TREE) ?? null);
+  protected readonly selectedExplanation = computed(() => {
+    const node = this.selected();
+    const key = node?.kind === 'operation' ? pathKey(node.path) : null;
+    return key ? (this.explanations().get(node?.tree ?? ROOT_TREE)?.steps.get(key) ?? null) : null;
+  });
   protected readonly formatValue = formatValue;
   protected readonly selected = signal<TransformNodeModel | null>(this.rootNode());
   protected readonly selectedView = computed(() => {
@@ -323,6 +377,32 @@ export class App {
   /** Folded until the user first opens it. */
   protected readonly paletteOpen = signal(storedOpen(PALETTE_OPEN_KEY, false));
   protected readonly resizing = signal(false);
+  protected readonly folded = signal(storedFolded());
+  protected readonly openTab = signal<OpenTab>('examples');
+  protected readonly testTab = signal<TestTab>('values');
+  protected readonly openTabs = computed<Tab[]>(() => [
+    { id: 'tenant', label: 'Tenant', dot: this.connected() ? 'connected' : undefined },
+    { id: 'examples', label: 'Examples' },
+    { id: 'file', label: 'File' },
+  ]);
+  protected readonly testTabs = computed<Tab[]>(() => {
+    const total = this.requirements().length;
+    const missing = this.missingCount();
+    return [
+      {
+        id: 'values',
+        label: 'Values',
+        badge: total ? (missing ? `${missing} / ${total}` : String(total)) : undefined,
+        alert: missing > 0,
+      },
+      { id: 'identity', label: 'Identity', dot: this.previewName() ? 'identity picked' : undefined },
+    ];
+  });
+  /** Who filled the Values tab, shown there while an identity is picked. */
+  protected readonly previewName = computed(() => {
+    const identity = this.previewContext()?.identity;
+    return identity ? identity.displayName || identity.name : null;
+  });
   protected readonly shellColumns = computed(() => {
     const left = this.leftOpen() ? `${this.leftWidth()}px` : '0px';
     const palette = this.paletteOpen() ? '220px' : '0px';
@@ -361,7 +441,21 @@ export class App {
   protected readonly guide = signal<'closed' | 'intro' | 'tour'>('closed');
   protected readonly guideSteps = GUIDE_STEPS;
 
+  constructor() {
+    effect(() => {
+      if (this.connected()) {
+        untracked(() => {
+          this.openTab.set('tenant');
+          this.unfold('open');
+        });
+      }
+    });
+  }
+
   protected onGuideStep(step: GuideStep): void {
+    if (step.section) {
+      this.unfold(step.section);
+    }
     if (step.pane === 'source' && !this.leftOpen()) {
       this.toggleLeft();
     } else if (step.pane === 'palette' && !this.paletteOpen()) {
@@ -378,6 +472,23 @@ export class App {
   protected toggleLeft(): void {
     this.leftOpen.update((open) => !open);
     this.persistLayout();
+  }
+
+  protected toggleSection(section: SourceSection): void {
+    this.folded.update((folded) => {
+      const next = new Set(folded);
+      if (!next.delete(section)) {
+        next.add(section);
+      }
+      return next;
+    });
+    storageSet(SOURCE_FOLDED_KEY, JSON.stringify([...this.folded()]));
+  }
+
+  private unfold(section: SourceSection): void {
+    if (this.folded().has(section)) {
+      this.toggleSection(section);
+    }
   }
 
   protected togglePalette(): void {
@@ -468,11 +579,7 @@ export class App {
     this.openDocument(text);
   }
 
-  protected loadExample(event: Event): void {
-    const id = (event.target as HTMLSelectElement).value;
-    if (!id) {
-      return;
-    }
+  protected loadExample(id: string): void {
     this.exampleId.set(id);
     this.openDocument(id === BLANK_EXAMPLE_ID ? '' : exampleText(id));
   }
@@ -510,10 +617,6 @@ export class App {
     this.selected.set(node);
   }
 
-  protected testValue(input: RequiredInput): string {
-    return this.effectiveValues()[inputId(input)] ?? '';
-  }
-
   protected onPreviewContext(context: PreviewContext | null): void {
     const previous = this.previewContext();
     if (previous?.identity.id !== context?.identity.id) {
@@ -528,8 +631,7 @@ export class App {
     this.previewContext.set(context);
   }
 
-  protected onTestValue(input: RequiredInput, event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
+  protected onTestValue({ input, value }: TestValueChange): void {
     this.testValues.update((values) => ({ ...values, [inputId(input)]: value }));
   }
 

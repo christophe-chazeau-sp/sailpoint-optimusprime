@@ -51,6 +51,11 @@ export interface RequiredInput {
 
 export const IMPLICIT_KEY = 'implicit';
 
+/** Identifies a required input across kinds, since an identity and an account key may be equal. */
+export function inputId(input: Pick<RequiredInput, 'kind' | 'key'>): string {
+  return `${input.kind}:${input.key}`;
+}
+
 export function accountKey(sourceName: string, attributeName: string): string {
   return `${sourceName} › ${attributeName}`;
 }

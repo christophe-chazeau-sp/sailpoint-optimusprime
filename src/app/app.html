@@ -9,74 +9,111 @@
         </div>
       </header>
 
-      <app-tenant-browser data-guide="tenant" (loaded)="onTenantTransform($event)" />
+      <app-tenant-connection data-guide="tenant" />
 
-      <label class="field" data-guide="examples">
-        <span>Example</span>
-        <select [value]="exampleId()" (change)="loadExample($event)">
-          @if (!exampleId()) {
-            <option value="">Custom document</option>
-          }
-          <option [value]="blankExampleId">New empty transform</option>
-          @for (example of examples; track example.id) {
-            <option [value]="example.id">{{ example.label }}</option>
-          }
-        </select>
-      </label>
-
-      <div class="field grow" data-guide="json">
-        <span>JSON document</span>
-        <app-json-editor
-          class="editor"
-          [value]="jsonText()"
-          [highlight]="highlight()"
-          (valueChange)="onEditorChange($event)"
-          (cursorMove)="onEditorCursor($event)"
-        />
-      </div>
-
-      <app-identity-preview
-        data-guide="preview"
-        [document]="connectedDocument()"
-        [needsImplicit]="needsImplicit()"
-        [localResult]="evaluation().result"
-        (contextChange)="onPreviewContext($event)"
-      />
-
-      <section class="test" data-guide="test" aria-label="Test values">
-        <h2 class="test-title">Test values</h2>
-        <div class="test-fields">
-          @for (input of requirements(); track input.kind + ':' + input.key) {
-            <label class="test-field">
-              <span class="test-label">
-                {{ input.label }}
-                <small>{{ input.detail }}</small>
-              </span>
-              <input
-                type="text"
-                spellcheck="false"
-                placeholder="null"
-                [attr.data-input]="input.kind + ':' + input.key"
-                [value]="testValue(input)"
-                (input)="onTestValue(input, $event)"
-              />
+      <div class="sections">
+        <app-source-section
+          data-guide="open"
+          data-section="open"
+          [number]="1"
+          heading="Open a transform"
+          [folded]="folded().has('open')"
+          (toggle)="toggleSection('open')"
+        >
+          <app-tab-bar
+            label="Open a transform from"
+            [tabs]="openTabs()"
+            [active]="openTab()"
+            (choose)="openTab.set($any($event))"
+          />
+          <app-tenant-transforms
+            role="tabpanel"
+            [hidden]="openTab() !== 'tenant'"
+            (loaded)="onTenantTransform($event)"
+          />
+          <app-example-list
+            role="tabpanel"
+            [hidden]="openTab() !== 'examples'"
+            [active]="exampleId()"
+            [blankId]="blankExampleId"
+            (pick)="loadExample($event)"
+          />
+          <div class="file-tab" role="tabpanel" [hidden]="openTab() !== 'file'">
+            <label class="file">
+              <input type="file" accept="application/json,.json" (change)="onFile($event)" />
+              Choose a .json file
             </label>
-          } @empty {
-            <p class="test-empty">This transform does not need any input values.</p>
-          }
-        </div>
-      </section>
+            <div class="drop" (dragover)="onDragOver($event)" (drop)="onDrop($event)">Or drop a file here</div>
+          </div>
+        </app-source-section>
 
-      <label class="file">
-        <input type="file" accept="application/json,.json" (change)="onFile($event)" />
-        Choose a .json file
-      </label>
-      <div class="drop" (dragover)="onDragOver($event)" (drop)="onDrop($event)">
-        Or drop a file here
+        <app-source-section
+          class="grow"
+          data-guide="json"
+          data-section="json"
+          [number]="2"
+          heading="JSON document"
+          [folded]="folded().has('json')"
+          (toggle)="toggleSection('json')"
+        >
+          @if (errorMessage() && folded().has('json')) {
+            <span sectionBadge class="flag">Invalid</span>
+          }
+          <app-json-editor
+            class="editor"
+            [value]="jsonText()"
+            [highlight]="highlight()"
+            (valueChange)="onEditorChange($event)"
+            (cursorMove)="onEditorCursor($event)"
+          />
+          @if (errorMessage(); as message) {
+            <p class="error" role="alert">{{ message }}</p>
+          }
+        </app-source-section>
+
+        <app-source-section
+          class="test"
+          data-guide="test"
+          data-section="test"
+          [number]="3"
+          heading="Test"
+          [folded]="folded().has('test')"
+          (toggle)="toggleSection('test')"
+        >
+          @if (missingCount(); as missing) {
+            <span
+              sectionBadge
+              class="flag"
+              data-testid="missing-badge"
+              [title]="missing + ' input values are empty and count as null'"
+            >
+              {{ missing }} without a value
+            </span>
+          }
+          <app-tab-bar label="Test with" [tabs]="testTabs()" [active]="testTab()" (choose)="testTab.set($any($event))" />
+          <app-test-values
+            class="panel"
+            role="tabpanel"
+            aria-label="Test values"
+            [hidden]="testTab() !== 'values'"
+            [requirements]="requirements()"
+            [values]="effectiveValues()"
+            [filledFrom]="previewName()"
+            (valueChange)="onTestValue($event)"
+          />
+          <app-identity-preview
+            class="panel"
+            role="tabpanel"
+            [hidden]="testTab() !== 'identity'"
+            [document]="connectedDocument()"
+            [needsImplicit]="needsImplicit()"
+            [localResult]="evaluation().result"
+            (contextChange)="onPreviewContext($event)"
+          />
+        </app-source-section>
       </div>
-      @if (errorMessage(); as message) {
-        <p class="error" role="alert">{{ message }}</p>
-      }
+
+
       <div
         class="splitter"
         [class.active]="resizing()"
@@ -181,9 +218,18 @@
           <span class="test-label">Transform output</span>
           <output>{{ resultText(evaluation().result) }}</output>
         </div>
+        @if (explanation(); as explained) {
+          <app-explanation-card [explanation]="explained" />
+        }
         @if (selected(); as node) {
           <h2 class="inspector-title">{{ selectedView()?.title }}</h2>
           <p class="inspector-category">{{ selectedView()?.category }}</p>
+          @if (selectedExplanation(); as line) {
+            <p class="plain" data-testid="step-explanation">
+              <strong>In plain English:</strong>
+              <app-explain-text [text]="line" />
+            </p>
+          }
           @if (node.path) {
             <div class="inspector-actions">
               @if (node.kind === 'operation') {

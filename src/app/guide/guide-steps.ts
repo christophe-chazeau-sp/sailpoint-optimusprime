@@ -1,3 +1,5 @@
+import type { SourceSection } from '../app';
+
 /** A pane the tour opens before showing a step inside it. */
 export type GuidePane = 'source' | 'palette' | 'inspector';
 
@@ -7,6 +9,8 @@ export interface GuideStep {
   title: string;
   text: string;
   pane?: GuidePane;
+  /** A source-pane section the tour unfolds for this step. */
+  section?: SourceSection;
 }
 
 export const GUIDE_STEPS: GuideStep[] = [
@@ -14,37 +18,34 @@ export const GUIDE_STEPS: GuideStep[] = [
     target: '[data-guide="source"]',
     pane: 'source',
     title: 'Source pane',
-    text: 'Everything about where the transform comes from, and the values it is tested with. Drag its edge to resize it, or fold it with the arrow.',
+    text: 'Where the transform comes from and what it is tested with, in three numbered steps. Fold any section by its title. Drag the pane’s edge to resize it, or fold the whole pane with the arrow.',
   },
   {
-    target: '[data-guide="tenant"] .tenant',
+    target: '[data-guide="tenant"]',
     pane: 'source',
-    title: 'Connect to a tenant',
-    text: 'Sign in with a JWT token or a client ID and secret. Once connected, the panel turns green, shows when a JWT expires, and lets you search the tenant’s transforms by name.',
+    title: 'Tenant connection',
+    text: 'Always shows whether you are connected. Click Connect to sign in with a JWT token or a client ID and secret. Once connected it turns green and counts down until the JWT expires.',
   },
   {
-    target: '[data-guide="examples"]',
+    target: '[data-guide="open"]',
     pane: 'source',
-    title: 'Examples and new transforms',
-    text: 'Load a built-in example, or pick “New empty transform” to build one from scratch. You can also choose or drop a .json file below.',
+    section: 'open',
+    title: '1 · Open a transform',
+    text: 'Three ways in: search the connected tenant’s transforms, load a built-in example or start an empty one, or choose or drop a .json file.',
   },
   {
     target: '[data-guide="json"]',
     pane: 'source',
-    title: 'JSON document',
+    section: 'json',
+    title: '2 · JSON document',
     text: 'The transform itself. Edit it here and the diagram follows; edit the diagram and the JSON follows. Clicking in the JSON selects the matching step.',
-  },
-  {
-    target: '[data-guide="preview"] .preview',
-    pane: 'source',
-    title: 'Preview with an identity',
-    text: 'When connected, pick a real identity: its attributes and accounts fill the test values. “Run on tenant” asks ISC for its own result and tells you whether it matches.',
   },
   {
     target: '[data-guide="test"]',
     pane: 'source',
-    title: 'Test values',
-    text: 'Every value the transform reads: the implicit input, account and identity attributes. Type a value, or leave a field blank for null. Results update as you type.',
+    section: 'test',
+    title: '3 · Test',
+    text: 'Values: every value the transform reads, the implicit input and account and identity attributes; leave a field blank for null. Identity: when connected, pick a real identity to fill the values, and “Run on tenant” to compare with ISC’s own result.',
   },
   {
     target: '[data-guide="palette"]',
@@ -71,12 +72,12 @@ export const GUIDE_STEPS: GuideStep[] = [
     target: '[data-testid="result"]',
     pane: 'inspector',
     title: 'Transform output',
-    text: 'The final result of the transform with the current test values, or the error that stopped it.',
+    text: 'The final result of the transform with the current test values, or the error that stopped it. Below it, “What it does” reads the whole transform in plain English.',
   },
   {
     target: '[data-guide="inspector"]',
     pane: 'inspector',
     title: 'Inspector',
-    text: 'Details of the selected step: its output, variables, every input with the one it used highlighted, and its JSON. Edit, Delete and Unplug buttons are here too.',
+    text: 'Details of the selected step: what it does in plain English, its output, variables, every input with the one it used highlighted, and its JSON. Edit, Delete and Unplug buttons are here too.',
   },
 ];

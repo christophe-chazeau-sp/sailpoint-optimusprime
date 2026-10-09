@@ -1,8 +1,6 @@
 <section class="preview" aria-label="Identity preview" data-testid="identity-preview">
-  <h2 class="title">Preview with an identity</h2>
-
   @if (!connected()) {
-    <p class="hint">Connect to a tenant above to preview this transform with one of its identities.</p>
+    <p class="hint">Connect to a tenant to preview this transform with one of its identities.</p>
   } @else if (identity(); as person) {
     <div class="person" data-testid="preview-identity">
       <div class="person-text">
@@ -11,7 +9,7 @@
       </div>
       <button type="button" class="link" (click)="clear()">Change</button>
     </div>
-    <p class="hint">Test values below are filled from this identity. Edit a field to override it.</p>
+    <p class="hint">The Values tab is filled from this identity. Edit a field there to override it.</p>
 
     @if (needsImplicit()) {
       <div class="implicit">
