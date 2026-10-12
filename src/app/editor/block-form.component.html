@@ -145,25 +145,22 @@
             type="text"
             spellcheck="false"
             [attr.data-field]="slot.spec.key"
-            [placeholder]="slot.spec.placeholder ?? ''"
+            [placeholder]="slot.spec.placeholder ?? (slot.spec.implicit ? 'the mapped source attribute' : '')"
             [value]="slot.single.text"
             (input)="setLiteral(slot.single, $event)"
           />
-          <small class="help">A plain value, or connect a block to {{ slot.spec.key }} on the canvas.</small>
+          <small class="help">
+            A plain value, or connect a block to {{ slot.spec.key }} on the canvas.
+            @if (slot.spec.implicit) {
+              Left empty, the step reads the attribute the identity profile maps it to.
+            }
+            {{ slot.spec.help ?? '' }}
+          </small>
         }
         @if (slot.error) {
           <small class="error">{{ slot.error }}</small>
         }
       </div>
-    }
-
-    @if (implicitSlot; as slot) {
-      <p class="note">
-        Connect a block to <code>{{ slot.key }}</code> on the canvas.
-        @if (slot.implicit) {
-          Left empty, the step reads the attribute the identity profile maps it to.
-        }
-      </p>
     }
 
     @if (info?.variables) {

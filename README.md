@@ -90,7 +90,7 @@ Select a step to see, in the right pane:
 ### Edit a transform
 
 - **Blocks pane:** every transform type, in folded sections (Sources, Text, Dates, Logic, Formats, Generators). Search finds blocks by name, type or description and opens the matching sections. Drag a block onto the canvas, or double-click it.
-- **Block form:** a form opens to set up the new block. Common attributes have their own fields. Tables, patterns and other structured attributes are edited as raw JSON. Attributes the form does not know are kept as they are.
+- **Block form:** a form opens to set up the new block. Common attributes have their own fields. A block that reads an input can take a typed value, such as `"input": "fr"` for ISO3166, a block connected on the canvas, or nothing, to read the implicit input. Tables, patterns and other structured attributes are edited as raw JSON. Attributes the form does not know are kept as they are.
 - **Edit a block:** double-click it, or use **Edit** in the right pane.
 - **Connect blocks:** drag from a block's output dot to another block's input dot, or to **out**. An output feeds one input at a time, so connecting it elsewhere moves the arrow. Pick an arrow up by its end to move it or drop it.
 - **Unconnected blocks:** they float on the canvas with a **Not connected** badge, and stay out of the JSON until you connect them.

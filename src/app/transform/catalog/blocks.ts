@@ -29,6 +29,7 @@ export interface SlotSpec {
   /** Leaving the slot empty makes the step read the identity profile's attribute. */
   implicit?: boolean;
   placeholder?: string;
+  help?: string;
 }
 
 export type BlockGroup = 'Sources' | 'Text' | 'Dates' | 'Logic' | 'Formats' | 'Generators';
@@ -48,7 +49,8 @@ export interface BlockInfo extends BlockSpec {
   operation: OperationInfo;
 }
 
-const INPUT: SlotSpec = { key: 'input', implicit: true };
+/** A typed value, a block from the canvas, or nothing to read the identity profile's attribute. */
+const INPUT: SlotSpec = { key: 'input', implicit: true, literal: true };
 
 const DATE_FORMATS = ['ISO8601', 'LDAP', 'PEOPLE_SOFT', 'EPOCH_TIME_JAVA', 'EPOCH_TIME_WIN32'];
 
@@ -79,7 +81,7 @@ const SPECS: BlockSpec[] = [
     type: 'reference',
     group: 'Sources',
     fields: [{ key: 'id', label: 'Transform name', kind: 'text', required: true, help: 'Name of the existing transform to reuse.' }],
-    slots: [{ key: 'input' }],
+    slots: [{ key: 'input', literal: true, help: 'Passed to the referenced transform as its input.' }],
   },
   {
     type: 'rule',
@@ -185,7 +187,7 @@ const SPECS: BlockSpec[] = [
       { key: 'expression', label: 'Expression', kind: 'text', required: true, placeholder: 'now+1d', help: 'Use y M w d h m s, with + - and / to round, for example now-5d/d.' },
       { key: 'roundUp', label: 'Round up', kind: 'boolean' },
     ],
-    slots: [INPUT],
+    slots: [{ ...INPUT, placeholder: '2026-01-31T00:00:00Z', help: 'An ISO 8601 date. Ignored when the expression starts with now.' }],
   },
   {
     type: 'dateCompare',
@@ -218,9 +220,9 @@ const SPECS: BlockSpec[] = [
     variables: true,
   },
 
-  { type: 'e164phone', group: 'Formats', fields: [{ key: 'defaultRegion', label: 'Default region', kind: 'text', placeholder: 'US' }], slots: [INPUT] },
-  { type: 'iso3166', group: 'Formats', fields: [{ key: 'format', label: 'Format', kind: 'select', options: ['alpha2', 'alpha3', 'numeric'] }], slots: [INPUT] },
-  { type: 'rfc5646', group: 'Formats', fields: [], slots: [INPUT] },
+  { type: 'e164phone', group: 'Formats', fields: [{ key: 'defaultRegion', label: 'Default region', kind: 'text', placeholder: 'US' }], slots: [{ ...INPUT, placeholder: '06 12 34 56 78' }] },
+  { type: 'iso3166', group: 'Formats', fields: [{ key: 'format', label: 'Format', kind: 'select', options: ['alpha2', 'alpha3', 'numeric'] }], slots: [{ ...INPUT, placeholder: 'fr' }] },
+  { type: 'rfc5646', group: 'Formats', fields: [], slots: [{ ...INPUT, placeholder: 'fra' }] },
 
   {
     type: 'usernameGenerator',

@@ -97,10 +97,6 @@ export class BlockFormComponent implements OnInit, AfterViewInit {
     return this.slots.filter((slot) => slot.spec.literal || slot.spec.multiple);
   }
 
-  protected get implicitSlot(): SlotSpec | undefined {
-    return this.info?.slots.find((slot) => !slot.literal && !slot.multiple);
-  }
-
   ngOnInit(): void {
     this.info = blockInfo(this.type);
     const attributes = isRecord(this.value?.['attributes']) ? (this.value['attributes'] as TransformObject) : {};
