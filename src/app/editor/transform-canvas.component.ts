@@ -25,6 +25,9 @@ import { AnchorSocketComponent } from './anchor-socket.component';
 import { EditFlow, EditFlowHandlers } from './edit-flow';
 import {
   capsuleSize,
+  ARROW_PICK_EVENT,
+  LITERAL_EDIT_EVENT,
+  LiteralEditDetail,
   CapsuleRole,
   EditorNode,
   FlowConnection,
@@ -83,10 +86,29 @@ export interface DisconnectRequest {
   inputKey: string;
 }
 
-/** A palette block dropped at a point of the canvas content. */
+/** An arrow, by the graph ids of its two ends and the input it feeds. */
+export interface ArrowRef {
+  sourceId: string;
+  targetId: string;
+  inputKey: string;
+}
+
+/** An unconnected block dropped on an arrow, to sit between its two ends. */
+export interface InterceptRequest extends ArrowRef {
+  blockId: string;
+}
+
+/** New text typed into a literal pill on the canvas. */
+export interface LiteralChange {
+  nodeId: string;
+  text: string;
+}
+
+/** A palette block dropped at a point of the canvas content, possibly on an arrow. */
 export interface BlockDrop {
   type: string;
   position: Point;
+  arrow?: ArrowRef;
 }
 
 const PORT_SIZE = 2;
@@ -94,6 +116,17 @@ const FIT_SCALE = 0.85;
 const MAX_FIT_ZOOM = 1.4;
 const PLACE_GAP = 80;
 const DOUBLE_PICK_MS = 400;
+const LITERAL_EDIT_WIDTH = 200;
+
+/** A literal's JSON text as the user typed it: strings without their quotes. */
+function literalText(json: string): string {
+  try {
+    const value: unknown = JSON.parse(json);
+    return typeof value === 'string' ? value : json;
+  } catch {
+    return json;
+  }
+}
 
 const LAYOUT_OPTIONS = {
   'elk.algorithm': 'layered',
@@ -146,6 +179,8 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
   readonly connectRequest = output<ConnectRequest>();
   readonly disconnectRequest = output<DisconnectRequest>();
   readonly blockDropped = output<BlockDrop>();
+  readonly interceptRequest = output<InterceptRequest>();
+  readonly literalChange = output<LiteralChange>();
   readonly helpRequested = output<void>();
   protected readonly mountError = signal<string | null>(null);
   protected readonly minimapOpen = signal(false);
@@ -163,6 +198,18 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
   private appliedLayoutKey: number | null = null;
   /** Spot for the next block added to the canvas. */
   private pendingPlacement: Point | null = null;
+  /** Rete id of the clicked arrow; arrows are rebuilt on every draw, which drops it. */
+  private selectedConnection: string | null = null;
+  /** Rete id of the arrow a dragged block would be inserted on. */
+  private armedConnection: string | null = null;
+  /** Unconnected block being dragged, which can be dropped on an arrow. */
+  private draggedBlock: EditorNode | null = null;
+  /** A selected literal pill was pressed; releasing it without a drag opens its text field. */
+  private literalPress: { id: string; at: Point } | null = null;
+  /** Literal pill being typed into, with the size and place to restore afterwards. */
+  private literalEdit: { id: string; width: number; position: Point } | null = null;
+  /** Arrow a block was dropped on; the next draw opens a gap for the block if it was inserted. */
+  private pendingInsert: { arrow: ArrowRef; blockId?: string } | null = null;
 
   constructor(private readonly injector: Injector) {}
 
@@ -180,6 +227,9 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
       return;
     }
     if (changes['selectedId']) {
+      if (this.selectedId) {
+        this.selectConnection(null);
+      }
       void this.syncSelection();
     }
     if (changes['results']) {
@@ -398,20 +448,110 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     this.scheduleRender();
   }
 
+  /** Asks to unplug the selected arrow's source. Returns false when no arrow is selected. */
+  deleteSelectedConnection(): boolean {
+    const editor = this.editor;
+    const connection = this.selectedConnection ? editor?.getConnection(this.selectedConnection) : undefined;
+    const target = connection ? editor?.getNode(connection.target) : undefined;
+    if (!connection || !target) {
+      return false;
+    }
+    this.selectConnection(null);
+    this.disconnectRequest.emit({ targetId: target.model.id, inputKey: connection.targetInput });
+    return true;
+  }
+
+  private selectConnection(id: string | null): void {
+    if (id === this.selectedConnection) {
+      return;
+    }
+    for (const previous of [this.selectedConnection, id]) {
+      const connection = previous ? this.editor?.getConnection(previous) : undefined;
+      if (connection) {
+        connection.selected = previous === id;
+        void this.area?.update('connection', connection.id);
+      }
+    }
+    this.selectedConnection = id;
+  }
+
+  private armConnection(connection: FlowConnection | undefined): void {
+    const id = connection?.id ?? null;
+    if (id === this.armedConnection) {
+      return;
+    }
+    for (const previous of [this.armedConnection, id]) {
+      const item = previous ? this.editor?.getConnection(previous) : undefined;
+      if (item) {
+        item.armed = previous === id;
+        void this.area?.update('connection', item.id);
+      }
+    }
+    this.armedConnection = id;
+  }
+
+  /** The arrow under the pointer, ignoring those that touch the dragged block's own tree. */
+  private arrowAt(clientX: number, clientY: number, dragged?: EditorNode): FlowConnection | undefined {
+    const editor = this.editor;
+    if (!editor || typeof document.elementsFromPoint !== 'function') {
+      return undefined;
+    }
+    for (const element of document.elementsFromPoint(clientX, clientY)) {
+      const id = element.getAttribute('data-connection');
+      const connection = id ? editor.getConnection(id) : undefined;
+      if (!connection?.droppable) {
+        continue;
+      }
+      const ends = [editor.getNode(connection.source), editor.getNode(connection.target)];
+      if (dragged && ends.some((node) => node?.id === dragged.id || node?.model.tree === dragged.model.tree)) {
+        continue;
+      }
+      return connection;
+    }
+    return undefined;
+  }
+
+  private arrowRef(connectionId: string | null): ArrowRef | undefined {
+    const editor = this.editor;
+    const connection = connectionId ? editor?.getConnection(connectionId) : undefined;
+    const source = connection ? editor?.getNode(connection.source) : undefined;
+    const target = connection ? editor?.getNode(connection.target) : undefined;
+    if (!connection || !source || !target) {
+      return undefined;
+    }
+    return { sourceId: source.model.id, targetId: target.model.id, inputKey: connection.targetInput };
+  }
+
+  /** Only a whole unconnected block can be taken off the canvas and put on an arrow. */
+  private canIntercept(node: EditorNode | undefined): node is EditorNode {
+    return Boolean(node?.model.floating && node.model.kind === 'operation' && node.model.path?.length === 0);
+  }
+
   protected onDragOver(event: DragEvent): void {
     if (event.dataTransfer?.types.includes(BLOCK_MIME)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
+      this.armConnection(this.arrowAt(event.clientX, event.clientY));
+    }
+  }
+
+  protected onDragLeave(event: DragEvent): void {
+    const into = event.relatedTarget;
+    if (!(into instanceof Node) || !this.host().nativeElement.contains(into)) {
+      this.armConnection(undefined);
     }
   }
 
   protected onDrop(event: DragEvent): void {
     const type = event.dataTransfer?.getData(BLOCK_MIME);
+    const arrow = this.arrowRef(this.armedConnection);
+    this.armConnection(undefined);
     if (!type) {
       return;
     }
     event.preventDefault();
-    this.blockDropped.emit({ type, position: this.contentPoint(event.clientX, event.clientY) });
+    this.pendingInsert = arrow ? { arrow } : null;
+    this.blockDropped.emit({ type, position: this.contentPoint(event.clientX, event.clientY), arrow });
   }
 
   private contentPoint(clientX: number, clientY: number): Point {
@@ -590,7 +730,7 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
 
     area.addPipe((context) => {
       // The box glow and selection ring paint with the node. Keep connectors above them
-      // so arrowheads stay visible, without letting the connector catch clicks.
+      // so arrowheads stay visible; only the arrow's own hit line catches clicks.
       if (context.type === 'render' && context.data.element instanceof HTMLElement) {
         if (context.data.type === 'connection') {
           context.data.element.style.zIndex = '2';
@@ -602,7 +742,13 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
         }
       }
       if (context.type === 'nodepicked') {
+        this.selectConnection(null);
         const node = editor.getNode(context.data.id);
+        this.draggedBlock = this.canIntercept(node) ? node : null;
+        this.literalPress =
+          node?.capsule === 'literal' && node.model.id === this.selectedId && !this.literalEdit
+            ? { id: node.id, at: { ...area.area.pointer } }
+            : null;
         if (node?.capsule === 'input' || node?.capsule === 'output') {
           return context;
         }
@@ -617,12 +763,45 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
           !target.closest('[data-testid="node"]') &&
           !minimap.element.contains(target)
         ) {
+          this.selectConnection(null);
           this.nodeSelected.emit(null);
+        }
+        if (this.literalEdit && !(target instanceof HTMLInputElement && target.matches('.literal-edit'))) {
+          // The canvas keeps the focus on a press, so the field would not lose it by itself.
+          this.host().nativeElement.querySelector<HTMLInputElement>('.literal-edit')?.blur();
+        }
+      } else if (context.type === 'pointermove') {
+        const { event } = context.data;
+        if (this.draggedBlock && (event.buttons & 1) === 1) {
+          this.armConnection(this.arrowAt(event.clientX, event.clientY, this.draggedBlock));
+        }
+      } else if (context.type === 'nodedragged') {
+        const press = this.literalPress;
+        this.literalPress = null;
+        const pointer = area.area.pointer;
+        if (press?.id === context.data.id && Math.hypot(pointer.x - press.at.x, pointer.y - press.at.y) < 3) {
+          void this.startLiteralEdit(context.data);
+        }
+        const arrow = this.arrowRef(this.armedConnection);
+        const block = this.draggedBlock;
+        this.armConnection(undefined);
+        this.draggedBlock = null;
+        if (arrow && block?.id === context.data.id) {
+          this.pendingInsert = { arrow, blockId: block.model.id };
+          this.interceptRequest.emit({ ...arrow, blockId: block.model.id });
         }
       } else if (context.type === 'translated') {
         this.updateReferenceLanes();
       }
       return context;
+    });
+
+    this.host().nativeElement.addEventListener(ARROW_PICK_EVENT, (event) => {
+      this.selectConnection((event as CustomEvent<string>).detail);
+      this.nodeSelected.emit(null);
+    });
+    this.host().nativeElement.addEventListener(LITERAL_EDIT_EVENT, (event) => {
+      void this.endLiteralEdit((event as CustomEvent<LiteralEditDetail>).detail);
     });
 
     this.editor = editor;
@@ -631,6 +810,38 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     this.minimap = minimap;
     this.syncMinimap();
     this.ready = true;
+  }
+
+  /** Opens a text field in a literal pill, widened to the left so its arrow keeps its start. */
+  private async startLiteralEdit(node: EditorNode): Promise<void> {
+    const area = this.area;
+    const position = area?.nodeViews.get(node.id)?.position;
+    if (!area || !position || node.capsule !== 'literal') {
+      return;
+    }
+    this.literalEdit = { id: node.id, width: node.width, position: { ...position } };
+    node.editText = literalText(node.model.attributes[0]?.value ?? node.caption ?? '');
+    const width = Math.max(node.width, LITERAL_EDIT_WIDTH);
+    await area.translate(node.id, { x: position.x - (width - node.width), y: position.y });
+    node.width = width;
+    await area.update('node', node.id);
+  }
+
+  private async endLiteralEdit(detail: LiteralEditDetail): Promise<void> {
+    const edit = this.literalEdit;
+    const node = this.editor?.getNode(detail.nodeId);
+    if (!edit || edit.id !== detail.nodeId || !node || node.editText === undefined) {
+      return;
+    }
+    this.literalEdit = null;
+    const before = node.editText;
+    node.editText = undefined;
+    node.width = edit.width;
+    await this.area?.translate(node.id, edit.position);
+    await this.area?.update('node', node.id);
+    if (detail.text !== null && detail.text !== before) {
+      this.literalChange.emit({ nodeId: node.model.id, text: detail.text });
+    }
   }
 
   private lastPick: { id: string; time: number } | null = null;
@@ -780,6 +991,8 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
           edge.reference ? 'ref' : 'out',
         );
         connection.reference = edge.reference === true;
+        connection.selectable = !connection.reference && !implicitIds.has(edge.sourceId);
+        connection.droppable = !connection.reference;
         connection.active = this.connectionActive(connection);
         await editor.addConnection(connection);
       }
@@ -789,6 +1002,8 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     const outputNode = nodes.get(TRANSFORM_OUTPUT_ID);
     if (root && outputNode) {
       const connection = new FlowConnection(root, outputNode, 'value', '');
+      connection.selectable = true;
+      connection.droppable = true;
       connection.active = this.connectionActive(connection);
       await editor.addConnection(connection);
     }
@@ -796,13 +1011,64 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
     // Input lines and results change box heights, which move the anchors; size first, then lay out.
     this.applyResults();
     if (fresh) {
+      this.pendingInsert = null;
       await this.layoutNodes();
       await this.fit();
     } else {
       await this.restorePositions();
+      await this.openGapForInsert();
       this.updateReferenceLanes();
     }
     await this.syncSelection();
+  }
+
+  /**
+   * Columns sit closer together than a box is wide, so a block put on an arrow would cover its
+   * neighbours. It moves right after the arrow's source, and what follows the target shifts right.
+   */
+  private async openGapForInsert(): Promise<void> {
+    const insert = this.pendingInsert;
+    this.pendingInsert = null;
+    const editor = this.editor;
+    const area = this.area;
+    if (!insert || !editor || !area) {
+      return;
+    }
+    const byModel = (id: string) => editor.getNodes().find((node) => node.model.id === id);
+    const source = byModel(insert.arrow.sourceId);
+    const target = byModel(insert.arrow.targetId);
+    const links = editor.getConnections().filter((connection) => !connection.reference);
+    const joins = (from: string, to: string) => links.some((link) => link.source === from && link.target === to);
+    const block = insert.blockId
+      ? byModel(insert.blockId)
+      : editor.getNodes().find((node) => source && target && joins(source.id, node.id) && joins(node.id, target.id));
+    if (!source || !target || !block || !joins(source.id, block.id) || !joins(block.id, target.id)) {
+      return;
+    }
+    const from = area.nodeViews.get(source.id)?.position;
+    const to = area.nodeViews.get(target.id)?.position;
+    if (!from || !to || to.x <= from.x) {
+      return;
+    }
+    const spot = { x: from.x + source.width + PLACE_GAP, y: from.y + (source.height - block.height) / 2 };
+    const shift = spot.x + block.width + PLACE_GAP - to.x;
+    if (shift > 0) {
+      const downstream = new Set([target.id]);
+      for (const id of downstream) {
+        for (const link of links) {
+          if (link.source === id && link.target !== block.id) {
+            downstream.add(link.target);
+          }
+        }
+      }
+      for (const id of downstream) {
+        const at = area.nodeViews.get(id)?.position;
+        if (at) {
+          await area.translate(id, { x: at.x + shift, y: at.y });
+        }
+      }
+    }
+    await area.translate(block.id, spot);
   }
 
   private rememberPositions(): void {
@@ -936,6 +1202,11 @@ export class TransformCanvasComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   private async clear(editor: NodeEditor<Schemes>): Promise<void> {
+    this.selectedConnection = null;
+    this.armedConnection = null;
+    this.draggedBlock = null;
+    this.literalPress = null;
+    this.literalEdit = null;
     try {
       await editor.clear();
     } catch {

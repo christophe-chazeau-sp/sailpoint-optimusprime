@@ -181,6 +181,8 @@
       (connectRequest)="onConnectRequest($event)"
       (disconnectRequest)="onDisconnectRequest($event)"
       (blockDropped)="onBlockDropped($event)"
+      (interceptRequest)="onInterceptRequest($event)"
+      (literalChange)="onLiteralChange($event)"
       (helpRequested)="guide.set('intro')"
     />
     <div class="edit-tools">
@@ -353,6 +355,8 @@
     [type]="request.type"
     [value]="request.value"
     [isRoot]="request.isRoot"
+    [onArrow]="!!request.arrow"
+    [arrowSlot]="request.arrowSlot ?? null"
     (save)="onFormSave($event)"
     (cancel)="onFormCancel()"
   />

@@ -1,8 +1,22 @@
-<div class="card" [title]="data.caption || data.view.title">
+<div class="card" [title]="literal ? 'Click the selected value to change it' : data.caption || data.view.title">
   <span class="handle" aria-hidden="true"></span>
   <div class="text">
     <span class="category" [class]="'tone-' + data.view.tone">{{ data.view.category }}</span>
-    <span class="title">{{ data.caption || data.view.title }}</span>
+    @if (data.editText !== undefined) {
+      <input
+        class="literal-edit"
+        data-testid="literal-edit"
+        type="text"
+        spellcheck="false"
+        aria-label="Value"
+        [value]="data.editText"
+        (pointerdown)="$event.stopPropagation()"
+        (keydown)="onEditKey($event)"
+        (blur)="finishEdit($any($event.target).value)"
+      />
+    } @else {
+      <span class="title">{{ data.caption || data.view.title }}</span>
+    }
     @if (data.view.detail) {
       <span class="detail">{{ data.view.detail }}</span>
     }

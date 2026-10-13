@@ -56,7 +56,7 @@ export const GUIDE_STEPS: GuideStep[] = [
   {
     target: '[data-guide="canvas"]',
     title: 'Diagram',
-    text: 'Data flows from left to right into “out”. Blue arrows show what was calculated. Click a box to inspect it, double-click to edit it, drag between dots to connect blocks, and press Delete to remove one.',
+    text: 'Data flows from left to right into “out”. Blue arrows show what was calculated. Click a box to inspect it, double-click to edit it, drag between dots to connect blocks, drop a block on an arrow to insert it, and press Delete to remove a selected block or arrow.',
   },
   {
     target: '.canvas-tools',

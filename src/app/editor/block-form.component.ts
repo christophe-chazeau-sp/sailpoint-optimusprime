@@ -74,6 +74,10 @@ export class BlockFormComponent implements OnInit, AfterViewInit {
   @Input() value: TransformObject | null = null;
   /** Editing the transform's output block also edits the transform name. */
   @Input() isRoot = false;
+  /** The new block was dropped on an arrow. */
+  @Input() onArrow = false;
+  /** Input that the arrow's source will fill; null when the block has none to give it. */
+  @Input() arrowSlot: string | null = null;
 
   readonly save = output<TransformObject>();
   readonly cancel = output<void>();

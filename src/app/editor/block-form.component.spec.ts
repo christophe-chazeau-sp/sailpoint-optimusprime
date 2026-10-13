@@ -3,11 +3,17 @@ import { allBlocks } from '../transform/catalog/blocks';
 import { TransformObject } from '../transform/workspace/workspace';
 import { BlockFormComponent } from './block-form.component';
 
-async function open(type: string, value: TransformObject | null = null) {
+async function open(
+  type: string,
+  value: TransformObject | null = null,
+  arrow?: { slot: string | null },
+) {
   await TestBed.configureTestingModule({ imports: [BlockFormComponent] }).compileComponents();
   const fixture = TestBed.createComponent(BlockFormComponent);
   fixture.componentInstance.type = type;
   fixture.componentInstance.value = value;
+  fixture.componentInstance.onArrow = arrow !== undefined;
+  fixture.componentInstance.arrowSlot = arrow?.slot ?? null;
   const saved: TransformObject[] = [];
   fixture.componentInstance.save.subscribe((block) => saved.push(block));
   fixture.detectChanges();
@@ -46,6 +52,25 @@ describe('BlockFormComponent', () => {
     expect(form.element.textContent).toContain('Identity Attribute block');
     form.submit();
     expect(form.saved[0]['attributes']).toEqual({ format: 'alpha3', input: plugged });
+  });
+
+  it('does not ask for the input an arrow will fill', async () => {
+    const form = await open('iso3166', null, { slot: 'input' });
+    expect(form.element.querySelector('[data-field="input"]')).toBeNull();
+    expect(form.element.querySelector('[data-testid="arrow-slot"]')?.textContent).toContain('From the arrow');
+    form.submit();
+    expect(form.saved[0]).toEqual({ type: 'iso3166', attributes: {} });
+  });
+
+  it('still asks for the other inputs of a block dropped on an arrow', async () => {
+    const form = await open('dateCompare', null, { slot: 'firstDate' });
+    expect(form.element.querySelector('[data-field="firstDate"]')).toBeNull();
+    expect(form.element.querySelector('[data-field="secondDate"]')).not.toBeNull();
+  });
+
+  it('warns when a block dropped on an arrow has no input for it', async () => {
+    const form = await open('uuid', null, { slot: null });
+    expect(form.element.querySelector('[data-testid="arrow-note"]')).not.toBeNull();
   });
 
   it('offers a typed input on every block that reads one', () => {

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { FlowConnection } from './flow-node';
+import { ARROW_PICK_EVENT, FlowConnection } from './flow-node';
 
 interface Point {
   x: number;
@@ -42,9 +42,23 @@ const STRAIGHT_SNAP = 4;
       [class.active]="active()"
       [class.variable]="variable()"
       [class.pseudo]="pseudo()"
+      [class.selectable]="selectable()"
+      [class.selected]="highlighted()"
     >
       @if (start && end) {
-        <path [attr.d]="stepPath()" />
+        @if (highlighted()) {
+          <path class="halo" data-testid="connection-glow" [attr.d]="stepPath()" />
+        }
+        <path class="line" [attr.d]="stepPath()" />
+        @if (selectable() || droppable()) {
+          <path
+            class="hit"
+            data-testid="connection-hit"
+            [attr.data-connection]="data.id"
+            [attr.d]="stepPath()"
+            (pointerdown)="pick($event)"
+          />
+        }
         @if (arrowPoints(); as points) {
           <polygon [attr.points]="points" />
         }
@@ -119,6 +133,40 @@ const STRAIGHT_SNAP = 4;
 
     svg.pseudo polygon {
       fill: #4c6ef5;
+    }
+
+    svg path.hit {
+      stroke: transparent;
+      stroke-width: 22px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: stroke;
+    }
+
+    svg.selectable path.hit {
+      cursor: pointer;
+    }
+
+    svg.selectable:hover path.line {
+      stroke-width: 2.5px;
+    }
+
+    svg.selected path.halo {
+      stroke: rgb(76 110 245 / 35%);
+      stroke-width: 12px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: blur(4px);
+    }
+
+    svg.selected path.line {
+      stroke: #4c6ef5;
+      stroke-width: 2.5px;
+    }
+
+    svg.selected polygon {
+      fill: #4c6ef5;
+      filter: drop-shadow(0 0 3px rgb(76 110 245 / 60%));
     }
 
     svg.variable path {
@@ -307,6 +355,27 @@ export class TransformConnectionComponent {
   /** The line that follows the pointer while an arrow is being drawn. */
   protected pseudo(): boolean {
     return Boolean((this.data as { isPseudo?: boolean } | undefined)?.isPseudo);
+  }
+
+  protected selectable(): boolean {
+    return Boolean(this.data?.selectable) && !this.pseudo();
+  }
+
+  protected droppable(): boolean {
+    return Boolean(this.data?.droppable) && !this.pseudo();
+  }
+
+  protected highlighted(): boolean {
+    return Boolean(this.data?.selected || this.data?.armed);
+  }
+
+  /** Selects the arrow without starting a pan of the canvas underneath. */
+  protected pick(event: PointerEvent): void {
+    if (event.button !== 0 || !this.selectable()) {
+      return;
+    }
+    event.stopPropagation();
+    event.target?.dispatchEvent(new CustomEvent(ARROW_PICK_EVENT, { bubbles: true, detail: this.data.id }));
   }
 
   protected variable(): boolean {

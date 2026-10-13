@@ -23,6 +23,8 @@ export type EditorNode = ClassicPreset.Node & {
   capsule?: CapsuleRole;
   /** Text inside a capsule. Action cards keep using {@link NodePresentation.title}. */
   caption?: string;
+  /** The literal's text, shown in a field while it is being changed on the canvas. */
+  editText?: string;
 };
 
 export class FlowNode extends ClassicPreset.Node {
@@ -32,6 +34,7 @@ export class FlowNode extends ClassicPreset.Node {
   inputValues: NodeInputValue[] = [];
   capsule?: CapsuleRole;
   caption?: string;
+  editText?: string;
 
   constructor(
     public readonly model: TransformNodeModel,
@@ -62,6 +65,13 @@ export class FlowConnection extends ClassicPreset.Connection<ClassicPreset.Node,
   lane?: number;
   /** Current value of the variable, shown on the arrow. */
   valueText = '';
+  /** Can be clicked and deleted to unplug its source; variable and implicit-input arrows cannot. */
+  selectable = false;
+  selected = false;
+  /** A block can be dropped on it to sit between its two ends. */
+  droppable = false;
+  /** A dragged block is over it and would be inserted on drop. */
+  armed = false;
 
   constructor(
     source: ClassicPreset.Node,
@@ -75,6 +85,17 @@ export class FlowConnection extends ClassicPreset.Connection<ClassicPreset.Node,
 }
 
 export const valueSocket = new ClassicPreset.Socket('value');
+
+/** Bubbles from an arrow to the canvas when it is clicked; the detail is the connection id. */
+export const ARROW_PICK_EVENT = 'arrowpick';
+
+/** Bubbles from a literal pill when its edit ends; the text is null when it was cancelled. */
+export const LITERAL_EDIT_EVENT = 'literaledit';
+
+export interface LiteralEditDetail {
+  nodeId: string;
+  text: string | null;
+}
 
 export const NODE_WIDTH = 300;
 

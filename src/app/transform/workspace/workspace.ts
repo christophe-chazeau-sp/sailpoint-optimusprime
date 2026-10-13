@@ -36,6 +36,8 @@ export interface SlotTarget {
   key: string;
   /** Position in a list attribute: replace that item, or append when 'append'. */
   index?: number | 'append';
+  /** Slide the value in at `index` instead of replacing the item there. */
+  insert?: boolean;
 }
 
 export type EditResult = { ok: true; workspace: Workspace } | { ok: false; message: string };
@@ -168,6 +170,30 @@ export function connect(workspace: Workspace, source: Address, target: SlotTarge
   const block = adjustAfterRemoval(source, target.block);
   next = place(next, { ...target, block }, placed);
   return { ok: true, workspace: next };
+}
+
+/**
+ * Puts an unconnected block on an arrow: the arrow's source moves into the block's `input`, and the
+ * block takes the source's place in `into`, or becomes the output when `into` is null.
+ */
+export function intercept(
+  workspace: Workspace,
+  block: Address,
+  source: Address,
+  into: SlotTarget | null,
+  input: SlotTarget,
+): EditResult {
+  if (block.tree === ROOT_TREE || block.path.length > 0) {
+    return { ok: false, message: 'Only a block that is not connected can be dropped on an arrow.' };
+  }
+  const fed = connect(workspace, source, input);
+  if (!fed.ok) {
+    return fed;
+  }
+  if (!into) {
+    return setRoot(fed.workspace, block);
+  }
+  return connect(fed.workspace, block, { ...into, insert: typeof into.index === 'number' });
 }
 
 /** Makes a block the transform's output. The previous output block floats on the canvas. */
@@ -320,6 +346,9 @@ function place(workspace: Workspace, target: SlotTarget, value: unknown): Worksp
   }
   if (target.index === 'append' || target.index >= current.length) {
     return applyEdit(next, target.block.tree, [...slotPath, current.length], value, true);
+  }
+  if (target.insert) {
+    return applyEdit(next, target.block.tree, [...slotPath, target.index], value, true);
   }
   const occupant = current[target.index];
   if (isTransform(occupant)) {

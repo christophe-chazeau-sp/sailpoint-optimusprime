@@ -1,9 +1,9 @@
-import { ChangeDetectorRef, Component, HostBinding, Input, OnChanges, OnDestroy } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, HostBinding, Input, OnChanges, OnDestroy } from '@angular/core';
 import { ClassicPreset } from 'rete';
 import { RefDirective } from 'rete-angular-plugin/22';
 import { DeclaredVariable, formatValue, StepResult } from '../transform/evaluator/evaluator';
 import { ROOT_TREE } from '../transform/workspace/workspace';
-import { EditorNode, inputAnchorRatio } from './flow-node';
+import { EditorNode, inputAnchorRatio, LITERAL_EDIT_EVENT, LiteralEditDetail } from './flow-node';
 import { TooltipService } from './tooltip.service';
 
 interface Anchor {
@@ -36,10 +36,12 @@ export class TransformNodeComponent implements OnChanges, OnDestroy {
 
   seed = 0;
   private velocityBubble: Element | null = null;
+  private editing = false;
 
   constructor(
     private readonly cdr: ChangeDetectorRef,
     private readonly tooltip: TooltipService,
+    private readonly host: ElementRef<HTMLElement>,
   ) {
     this.cdr.detach();
   }
@@ -114,8 +116,36 @@ export class TransformNodeComponent implements OnChanges, OnDestroy {
 
   ngOnChanges(): void {
     this.seed++;
+    const startsEditing = this.data.editText !== undefined && !this.editing;
+    this.editing = this.data.editText !== undefined;
     this.cdr.detectChanges();
+    if (startsEditing) {
+      const field = this.host.nativeElement.querySelector<HTMLInputElement>('.literal-edit');
+      field?.focus();
+      field?.select();
+    }
     requestAnimationFrame(() => this.rendered?.());
+  }
+
+  onEditKey(event: KeyboardEvent): void {
+    event.stopPropagation();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.finishEdit((event.target as HTMLInputElement).value);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      this.finishEdit(null);
+    }
+  }
+
+  /** Ends the edit once, whether by Enter, Escape or leaving the field. */
+  finishEdit(text: string | null): void {
+    if (!this.editing) {
+      return;
+    }
+    this.editing = false;
+    const detail: LiteralEditDetail = { nodeId: this.data.id, text };
+    this.host.nativeElement.dispatchEvent(new CustomEvent(LITERAL_EDIT_EVENT, { bubbles: true, detail }));
   }
 
   inputAnchors(): Anchor[] {

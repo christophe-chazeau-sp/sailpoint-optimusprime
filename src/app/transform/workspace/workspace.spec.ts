@@ -4,6 +4,7 @@ import {
   connect,
   deleteAt,
   disconnect,
+  intercept,
   ROOT_TREE,
   setRoot,
   uidOf,
@@ -102,6 +103,73 @@ describe('workspace', () => {
       attributes: { input: { type: 'identityAttribute', attributes: { name: 'email' } } },
     });
     expectInSync(workspace);
+  });
+
+  it('puts a block on an arrow into a list, keeping its place', () => {
+    let workspace = addFloating(read(CONCAT), { type: 'upper', attributes: {} });
+    const upper = { tree: workspace.floating[0].id, path: [] };
+    const root = { tree: ROOT_TREE, path: [] };
+    workspace = ok(
+      intercept(
+        workspace,
+        upper,
+        { tree: ROOT_TREE, path: ['attributes', 'values', 2] },
+        { block: root, key: 'values', index: 2 },
+        { block: upper, key: 'input' },
+      ),
+    );
+    expect(workspace.floating).toEqual([]);
+    expect((workspace.document!['attributes'] as { values: unknown[] }).values).toEqual([
+      { type: 'identityAttribute', attributes: { name: 'firstname' } },
+      ' ',
+      { type: 'upper', attributes: { input: { type: 'identityAttribute', attributes: { name: 'lastname' } } } },
+    ]);
+    expectInSync(workspace);
+  });
+
+  it('puts a block on an arrow that carries a typed value', () => {
+    let workspace = addFloating(read(CONCAT), { type: 'trim', attributes: {} });
+    const trim = { tree: workspace.floating[0].id, path: [] };
+    workspace = ok(
+      intercept(
+        workspace,
+        trim,
+        { tree: ROOT_TREE, path: ['attributes', 'values', 1] },
+        { block: { tree: ROOT_TREE, path: [] }, key: 'values', index: 1 },
+        { block: trim, key: 'input' },
+      ),
+    );
+    const values = (workspace.document!['attributes'] as { values: unknown[] }).values;
+    expect(values).toHaveLength(3);
+    expect(values[1]).toEqual({ type: 'trim', attributes: { input: ' ' } });
+    expectInSync(workspace);
+  });
+
+  it('puts a block on the output arrow and keeps the transform name', () => {
+    let workspace = addFloating(read(CONCAT), { type: 'lower', attributes: {} });
+    const lower = { tree: workspace.floating[0].id, path: [] };
+    workspace = ok(
+      intercept(workspace, lower, { tree: ROOT_TREE, path: [] }, null, { block: lower, key: 'input' }),
+    );
+    expect(workspace.floating).toEqual([]);
+    expect(workspace.document!['name']).toBe('Full name');
+    expect(workspace.document!['type']).toBe('lower');
+    const input = (workspace.document!['attributes'] as { input: Record<string, unknown> }).input;
+    expect(input['type']).toBe('concat');
+    expect(input['name']).toBeUndefined();
+    expectInSync(workspace);
+  });
+
+  it('refuses to put a connected block on an arrow', () => {
+    const workspace = read(CONCAT);
+    const result = intercept(
+      workspace,
+      { tree: ROOT_TREE, path: ['attributes', 'values', 0] },
+      { tree: ROOT_TREE, path: ['attributes', 'values', 2] },
+      { block: { tree: ROOT_TREE, path: [] }, key: 'values', index: 2 },
+      { block: { tree: ROOT_TREE, path: ['attributes', 'values', 0] }, key: 'input' },
+    );
+    expect(result.ok).toBe(false);
   });
 
   it('refuses to plug a block into its own input', () => {

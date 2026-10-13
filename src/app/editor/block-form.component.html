@@ -16,6 +16,11 @@
   </header>
 
   <div class="body">
+    @if (onArrow && !arrowSlot) {
+      <p class="note" data-testid="arrow-note">
+        This block has no input to take the arrow, so it is added next to it, not connected.
+      </p>
+    }
     @if (isRoot) {
       <label class="row" [class.invalid]="nameError">
         <span class="label">Transform name <em>required</em></span>
@@ -137,7 +142,13 @@
             </div>
           }
           <button type="button" class="link" [attr.data-add]="slot.spec.key" (click)="addItem(slot)">+ Add value</button>
-          <small class="help">You can also connect blocks to {{ slot.spec.key }} on the canvas.</small>
+          @if (onArrow && slot.spec.key === arrowSlot) {
+            <small class="help" data-testid="arrow-slot">The arrow's value is added to {{ slot.spec.key }}.</small>
+          } @else {
+            <small class="help">You can also connect blocks to {{ slot.spec.key }} on the canvas.</small>
+          }
+        } @else if (onArrow && slot.spec.key === arrowSlot) {
+          <span class="chip" data-testid="arrow-slot">From the arrow you dropped the block on</span>
         } @else if (slot.single.kind === 'block') {
           <span class="chip" title="Connected on the canvas; unplug it there">{{ slot.single.label }} block</span>
         } @else {

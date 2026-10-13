@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import {
   App,
   BLANK_EXAMPLE_ID,
@@ -8,6 +9,7 @@ import {
   SOURCE_FOLDED_KEY,
 } from './app';
 import { PALETTE_COLLAPSED_KEY } from './editor/block-palette.component';
+import { TransformCanvasComponent, TRANSFORM_OUTPUT_ID } from './editor/transform-canvas.component';
 import { EXPLAIN_OPEN_KEY } from './inspector/explanation-card.component';
 
 describe('App', () => {
@@ -285,5 +287,62 @@ describe('App', () => {
     splitter.dispatchEvent(new PointerEvent('dblclick', { bubbles: true }));
     fixture.detectChanges();
     expect(shell.style.gridTemplateColumns).toContain('380px');
+  });
+
+  it('should insert a block dropped on the output arrow', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const app = fixture.componentInstance;
+    const canvas = fixture.debugElement.query(By.directive(TransformCanvasComponent))
+      .componentInstance as TransformCanvasComponent;
+    const rootId = app['graph']().rootId!;
+    canvas.blockDropped.emit({
+      type: 'trim',
+      position: { x: 0, y: 0 },
+      arrow: { sourceId: rootId, targetId: TRANSFORM_OUTPUT_ID, inputKey: 'value' },
+    });
+    app['onFormSave']({ type: 'trim', attributes: {} });
+    const document = JSON.parse(app['jsonText']());
+    expect(document.type).toBe('trim');
+    expect(document.attributes.input.type).toBe('lower');
+    expect(app['selected']()?.id).toBe(app['graph']().rootId);
+  });
+
+  it('should change a literal typed into its pill on the canvas', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const app = fixture.componentInstance;
+    fixture.debugElement
+      .query((element) => element.name === 'app-json-editor')
+      .triggerEventHandler(
+        'valueChange',
+        '{ "name": "Greeting", "type": "concat", "attributes": { "values": ["Foo", 1] } }',
+      );
+    await fixture.whenStable();
+    const canvas = fixture.debugElement.query(By.directive(TransformCanvasComponent))
+      .componentInstance as TransformCanvasComponent;
+    const [text, number] = app['graph']().nodes.filter((node) => node.kind === 'literal');
+    canvas.literalChange.emit({ nodeId: text.id, text: 'Bar' });
+    canvas.literalChange.emit({ nodeId: number.id, text: '2' });
+    expect(JSON.parse(app['jsonText']()).attributes.values).toEqual(['Bar', 2]);
+  });
+
+  it('should delete a selected arrow before the selected block', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const canvas = fixture.debugElement.query(By.directive(TransformCanvasComponent))
+      .componentInstance as TransformCanvasComponent;
+    const text = () => fixture.componentInstance['jsonText']();
+    const before = text();
+    const arrow = vi.spyOn(canvas, 'deleteSelectedConnection').mockReturnValue(true);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(arrow).toHaveBeenCalled();
+    expect(text()).toBe(before);
+    arrow.mockReturnValue(false);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    expect(text()).not.toBe(before);
   });
 });

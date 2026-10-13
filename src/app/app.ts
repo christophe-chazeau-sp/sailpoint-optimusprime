@@ -3,9 +3,12 @@ import { BlockFormComponent } from './editor/block-form.component';
 import { BlockPaletteComponent } from './editor/block-palette.component';
 import { JsonEditorComponent } from './editor/json-editor.component';
 import {
+  ArrowRef,
   BlockDrop,
   ConnectRequest,
   DisconnectRequest,
+  InterceptRequest,
+  LiteralChange,
   Point,
   TransformCanvasComponent,
   TRANSFORM_INPUT_ID,
@@ -54,12 +57,16 @@ import {
   disconnect,
   EditResult,
   emptyWorkspace,
+  intercept,
+  isRecord,
   isTransform,
   ROOT_TREE,
   setRoot,
+  setValue,
   SlotTarget,
   TransformObject,
   treeValue,
+  uidOf,
   unsetRoot,
   updateBlock,
   valueAt,
@@ -160,6 +167,19 @@ interface FormRequest {
   address?: Address;
   /** Where to put a new block; null for the middle of the view. */
   position?: Point | null;
+  /** Arrow the new block was dropped on. */
+  arrow?: ArrowRef;
+  /** Input of the new block that the arrow's source will fill. */
+  arrowSlot?: string | null;
+}
+
+/** The input of a block that takes an arrow's source: a list, or the first empty input. */
+function interceptInput(block: Address, value: TransformObject): SlotTarget | null {
+  const attributes = isRecord(value['attributes']) ? value['attributes'] : {};
+  const slot = blockInfo(String(value['type']))?.slots.find(
+    (item) => item.multiple || attributes[item.key] === undefined,
+  );
+  return slot ? { block, key: slot.key, index: slot.multiple ? 'append' : undefined } : null;
 }
 
 @Component({
@@ -646,14 +666,74 @@ export class App {
   }
 
   protected onBlockDropped(drop: BlockDrop): void {
-    this.openAddForm(drop.type, drop.position);
+    this.openAddForm(drop.type, drop.position, drop.arrow);
   }
 
-  private openAddForm(type: string, position: Point | null): void {
+  private openAddForm(type: string, position: Point | null, arrow?: ArrowRef): void {
     if (!blockInfo(type)) {
       return;
     }
-    this.form.set({ type, value: null, isRoot: false, position });
+    const arrowSlot = arrow ? interceptInput({ tree: '', path: [] }, { type, attributes: {} })?.key ?? null : null;
+    this.form.set({ type, value: null, isRoot: false, position, arrow, arrowSlot });
+  }
+
+  /** Text typed into a literal pill. A value that was not text keeps its JSON type when it can. */
+  protected onLiteralChange(change: LiteralChange): void {
+    const node = graphNode(this.graph(), change.nodeId);
+    const address = node?.kind === 'literal' ? this.addressOf(node) : null;
+    if (!address) {
+      return;
+    }
+    const current = valueAt(this.workspace(), address);
+    let value: unknown = change.text;
+    if (typeof current !== 'string') {
+      try {
+        const parsed: unknown = JSON.parse(change.text);
+        value = parsed !== null && typeof parsed === 'object' ? change.text : parsed;
+      } catch {
+        value = change.text;
+      }
+    }
+    this.apply(setValue(this.workspace(), address, value), node?.id);
+  }
+
+  protected onInterceptRequest(request: InterceptRequest): void {
+    const node = graphNode(this.graph(), request.blockId);
+    const block = node ? this.addressOf(node) : null;
+    if (!block) {
+      this.refuse('That block cannot be dropped on an arrow.');
+      return;
+    }
+    this.apply(this.intercept(this.workspace(), block, request), node?.id);
+  }
+
+  /** Puts an unconnected block between the two ends of an arrow of the current graph. */
+  private intercept(workspace: Workspace, block: Address, arrow: ArrowRef): EditResult {
+    const graph = this.graph();
+    const value = valueAt(workspace, block);
+    if (!isTransform(value)) {
+      return { ok: false, message: 'That block no longer exists.' };
+    }
+    const target = graphNode(graph, arrow.targetId);
+    const into = target ? this.addressOf(target) : null;
+    const slot = into ? slotTarget(into, arrow.inputKey) : null;
+    if (arrow.targetId !== TRANSFORM_OUTPUT_ID && !slot) {
+      return { ok: false, message: 'That arrow cannot take a block.' };
+    }
+    const input = interceptInput(block, value);
+    if (!input) {
+      return { ok: false, message: `${String(value['type'])} has no free input to take the arrow.` };
+    }
+    if (arrow.sourceId === TRANSFORM_INPUT_ID) {
+      // The block reads the implicit input itself once it sits in the target's input.
+      return slot ? connect(workspace, block, slot) : setRoot(workspace, block);
+    }
+    const source = graphNode(graph, arrow.sourceId);
+    const from = source ? this.addressOf(source) : null;
+    if (!from) {
+      return { ok: false, message: 'That arrow cannot take a block.' };
+    }
+    return intercept(workspace, block, from, slot, input);
   }
 
   protected onNodeEdit(node: TransformNodeModel): void {
@@ -693,6 +773,14 @@ export class App {
     this.canvas()?.placeNextBlock(request.position ?? null);
     const next = addFloating(this.workspace(), value);
     const added = next.floating[next.floating.length - 1];
+    if (request.arrow) {
+      const inserted = this.intercept(next, { tree: added.id, path: [] }, request.arrow);
+      if (inserted.ok) {
+        this.commit(inserted.workspace, uidOf(added.value));
+        return;
+      }
+      this.refuse(inserted.message);
+    }
     this.commit(next, added.id);
   }
 
@@ -789,9 +877,13 @@ export class App {
     } else if (mod && (key === 'y' || (key === 'z' && event.shiftKey))) {
       event.preventDefault();
       this.redo();
-    } else if ((event.key === 'Delete' || event.key === 'Backspace') && this.selected()) {
-      event.preventDefault();
-      this.deleteSelected();
+    } else if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (this.canvas()?.deleteSelectedConnection()) {
+        event.preventDefault();
+      } else if (this.selected()) {
+        event.preventDefault();
+        this.deleteSelected();
+      }
     }
   }
 
