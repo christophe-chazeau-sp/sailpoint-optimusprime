@@ -79,6 +79,13 @@ describe('App', () => {
     await fixture.whenStable();
     const element = fixture.nativeElement as HTMLElement;
     const summary = () => element.querySelector('[data-testid="explain-summary"]');
+    const toggle = () => (element.querySelector('[data-testid="explain-toggle"]') as HTMLButtonElement).click();
+    expect(element.querySelector('[data-testid="explain-toggle"]')?.textContent).toContain('Experimental');
+    expect(summary()).toBeNull();
+
+    toggle();
+    fixture.detectChanges();
+    expect(localStorage.getItem(EXPLAIN_OPEN_KEY)).toBe('1');
     expect(summary()?.textContent).toContain('“Lowercase display” returns');
     expect(summary()?.textContent).toContain('in lowercase');
     expect(summary()?.querySelector('.chip')?.textContent).toBe('Bar');
@@ -86,7 +93,7 @@ describe('App', () => {
       'Returns the Concatenation result in lowercase.',
     );
 
-    (element.querySelector('[data-testid="explain-toggle"]') as HTMLButtonElement).click();
+    toggle();
     fixture.detectChanges();
     expect(summary()).toBeNull();
     expect(localStorage.getItem(EXPLAIN_OPEN_KEY)).toBe('0');
