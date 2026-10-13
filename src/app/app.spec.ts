@@ -80,7 +80,13 @@ describe('App', () => {
     const element = fixture.nativeElement as HTMLElement;
     const summary = () => element.querySelector('[data-testid="explain-summary"]');
     const toggle = () => (element.querySelector('[data-testid="explain-toggle"]') as HTMLButtonElement).click();
-    expect(element.querySelector('[data-testid="explain-toggle"]')?.textContent).toContain('Experimental');
+    const experimental = element.querySelector('[data-testid="explain-experimental"]') as HTMLElement;
+    experimental.dispatchEvent(new MouseEvent('mouseenter'));
+    fixture.detectChanges();
+    expect(element.querySelector('[data-testid="tooltip"]')?.textContent?.trim()).toBe('Experimental guess');
+    experimental.dispatchEvent(new MouseEvent('mouseleave'));
+    fixture.detectChanges();
+    expect(element.querySelector('[data-testid="tooltip"]')).toBeNull();
     expect(summary()).toBeNull();
 
     toggle();

@@ -372,6 +372,8 @@
     [style.top.px]="tip.y"
   >
     <strong>{{ tip.heading }}</strong>
-    <span>{{ tip.text }}</span>
+    @if (tip.text) {
+      <span>{{ tip.text }}</span>
+    }
   </div>
 }

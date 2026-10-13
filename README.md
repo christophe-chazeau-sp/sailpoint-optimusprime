@@ -71,7 +71,7 @@ Under **Transform output**, the **What it does** card reads the whole transform 
 - Nested conditionals and date comparisons are read as one chain of "otherwise ... if ..." clauses.
 - Conditional variables and steps nested too deeply to read inline are explained in "Where ..." lines under the sentence.
 - Known pitfalls show as warnings, such as `#set($x = null)$x`, which fails on the tenant, and Velocity templates in general.
-- Names of attributes, sources and patterns are shown as chips. The card is marked **Experimental** and starts folded. Click its title to open it, and the app remembers whether it is open.
+- Names of attributes, sources and patterns are shown as chips. The card starts folded, and a test-tube icon before its title marks it as an experimental guess. Click its title to open it, and the app remembers whether it is open.
 
 The explanation is built from rules, without AI, so it works offline and gives the same answer every time. It says what the transform literally does, not why.
 
